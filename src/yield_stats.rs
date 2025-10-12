@@ -75,3 +75,40 @@ impl AddRecord for PEYieldStats {
         }
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_seyieldstats() {
+        let result = SEYieldStats::new();
+        assert_eq!(result, SEYieldStats {
+            n_reads: 0,
+            max_length: 0,
+            clipped_yield: 0,
+            total_yield: 0,
+        });
+    }
+
+    #[test]
+    fn new_peyieldstats() {
+        let result = PEYieldStats::new();
+        assert_eq!(result, PEYieldStats {
+            first_end: SEYieldStats {
+                n_reads: 0,
+                max_length: 0,
+                clipped_yield: 0,
+                total_yield: 0,
+            },
+            second_end: SEYieldStats {
+                n_reads: 0,
+                max_length: 0,
+                clipped_yield: 0,
+                total_yield: 0,
+            },
+        });
+    }
+
+}
