@@ -5,8 +5,6 @@ mod runtime_error;
 
 use std::collections::HashMap;
 use std::fmt;
-use std::fs;
-use serde::Serialize;
 use log::{error, info, debug, trace};
 use clap::{Parser, ValueEnum};
 use clap_verbosity_flag::Verbosity;
@@ -65,40 +63,19 @@ struct Args {
     verbosity: Verbosity,
 }
 
-#[derive(Serialize)]
-enum Stats {
-    Yield(PEYieldStats),
-    Duplicate(DuplicateStats),
-}
-
-impl AddRecord for Stats {
-    fn add_record(&mut self, record: &Record) {
-        match self {
-            Stats::Yield(yield_stats) => *yield_stats += record,
-            Stats::Duplicate(dup_stats) => *dup_stats += record,
-        };
-    }
-}
-
-fn init_stats(args: &Args) -> Vec<Box<Stats>> {
+fn init_stats(args: &Args) -> Vec<Box<dyn AddRecord>> {
     trace!("Initializing stats objects...");
 
-    let mut stats: Vec<Box<Stats>> = Vec::new();
+    let mut stats: Vec<Box<dyn AddRecord>> = Vec::new();
 
-    match args.metrics {
-        Some(_) => {
-            trace!("Crating stats object for DuplicateStats");
-            stats.push(Box::new(Stats::Duplicate(DuplicateStats::new(&args.duplicate_type_tag))));
-        },
-        None => {}
+    if args.metrics.is_some() {
+        trace!("Creating stats object for DuplicateStats");
+        stats.push(Box::new(DuplicateStats::new(&args.duplicate_type_tag)));
     }
 
-    match args.yield_out {
-        Some(_) => {
-            trace!("Crating stats object for PEYieldStats");
-            stats.push(Box::new(Stats::Yield(PEYieldStats::new())));
-        },
-        None => {}
+    if args.yield_out.is_some() {
+        trace!("Creating stats object for PEYieldStats");
+        stats.push(Box::new(PEYieldStats::new()));
     }
 
     stats
@@ -137,7 +114,7 @@ fn get_rg_tag(record: &Record) -> Option<String> {
         })
 }
 
-fn process_bam(bam_filename: &String, stats: Vec<Box<Stats>>) -> Vec<Box<Stats>> {
+fn process_bam(bam_filename: &String, mut stats: Vec<Box<dyn AddRecord>>) -> Vec<Box<dyn AddRecord>> {
     // Open input file
     trace!("Opening input file: {}", bam_filename);
     let mut reader = Builder::default().build_from_path(bam_filename).expect("Error reading BAM file");
@@ -149,9 +126,9 @@ fn process_bam(bam_filename: &String, stats: Vec<Box<Stats>>) -> Vec<Box<Stats>>
     debug!("Read groups found: {:?}", rg);
 
     // Auxiliar add_record function
-    fn add_record_to_stats(mut stats: Vec<Box<Stats>>, record: &Record) -> Vec<Box<Stats>> {
-        let rg = get_rg_tag(&record);
+    fn add_record_to_stats(stats: &mut [Box<dyn AddRecord>], record: &Record) {
         /*
+        let rg = get_rg_tag(&record);
         let rg_str = match rg {
             Some(rg_id) => rg_id,
             None => String::from(""),
@@ -162,41 +139,48 @@ fn process_bam(bam_filename: &String, stats: Vec<Box<Stats>>) -> Vec<Box<Stats>>
         for stat in stats.iter_mut() {
             stat.add_record(record);
         }
-        stats
     }
 
     // Traverse input file while filling in the stats
     trace!("Processing BAM records...");
-    let stats = reader
-        .records()
-        .enumerate()
-        .fold(stats, |acc, (i, x)|  {
-            if i > 0 && i % 10_000_000 == 0 {
-                info!("{} elements processed...", i);
-            }
-            add_record_to_stats(acc, &x.unwrap())
+    for (i, rec) in reader.records().enumerate() {
+        if i > 0 && i % 10_000_000 == 0 {
+            info!("{} elements processed...", i);
         }
-    );
+
+        match rec {
+            Ok(record) => add_record_to_stats(&mut stats, &record),
+            Err(e) => {
+                error!("Error reading record {}: {}", i, e);
+                continue;
+            }
+        }
+    }
 
     stats
 }
 
-fn write_results(stats: &Vec<Box<Stats>>, args: &Args) {
+fn write_results(stats: &[Box<dyn AddRecord>], args: &Args) {
     trace!("Generating JSON output...");
 
+    use std::io::BufWriter;
+
     for stat in stats.iter() {
-        let maybe_filename = match &**stat {
-            Stats::Yield(_) => &args.yield_out,
-            Stats::Duplicate(_) => &args.metrics,
+        let kind = stat.kind();
+        let maybe_filename = match kind {
+            "yield_pe" | "yield_se" => &args.yield_out,
+            "duplicate" => &args.metrics,
+            _ => &None,
         };
 
         if let Some(filename) = maybe_filename {
             trace!("Output will be written to: {}", filename);
-
-            let json_result = serde_json::to_string_pretty(stat).unwrap();
-            fs::write(filename, json_result.as_bytes()).expect("Failed to write JSON output");
+            let file = std::fs::File::create(filename).expect("Failed to create output file");
+            let writer = BufWriter::new(file);
+            let json_value = stat.as_json();
+            serde_json::to_writer_pretty(writer, &json_value).expect("Failed to write JSON output");
         } else {
-            error!("No output file specified.");
+            error!("No output file specified for kind {}.", kind);
         }
     }
 }

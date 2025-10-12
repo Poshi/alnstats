@@ -184,6 +184,12 @@ impl AddRecord for DuplicateStats {
             }
         }
     }
+
+    fn as_json(&self) -> serde_json::Value {
+        self.to_json_with_extra()
+    }
+
+    fn kind(&self) -> &'static str { "duplicate" }
 }
 
 impl AddAssign<&Record> for DuplicateStats {

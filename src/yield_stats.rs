@@ -25,8 +25,8 @@ impl SEYieldStats {
 }
 
 impl AddRecord for SEYieldStats {
-    fn add_record(&mut self, rhs: &Record) {
-        let seq_length = rhs.sequence().len() as u64;
+    fn add_record(&mut self, record: &Record) {
+        let seq_length = record.sequence().len() as u64;
 
         self.n_reads += 1;
         self.max_length = self.max_length.max(seq_length);
@@ -34,6 +34,17 @@ impl AddRecord for SEYieldStats {
         self.clipped_yield += seq_length;
         self.total_yield += seq_length;
     }
+
+    fn as_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "n_reads": self.n_reads,
+            "max_length": self.max_length,
+            "clipped_yield": self.clipped_yield,
+            "total_yield": self.total_yield,
+        })
+    }
+
+    fn kind(&self) -> &'static str { "yield_se" }
 }
 
 impl AddAssign<&Record> for SEYieldStats {
@@ -59,22 +70,30 @@ impl PEYieldStats {
 }
 
 impl AddRecord for PEYieldStats {
-
-    fn add_record(&mut self, rhs: &Record) {
-        let flags = rhs.flags();
+    fn add_record(&mut self, record: &Record) {
+        let flags = record.flags();
 
         if flags.is_supplementary() || flags.is_secondary() {
             return;
         }
 
         if flags.is_first_segment() {
-            self.first_end += rhs;
+            self.first_end += record;
         } else if flags.is_last_segment() {
-            self.second_end += rhs;
+            self.second_end += record;
         } else {
             warn!("Warning: read is not marked as first or last segment. Skipping.");
         }
     }
+
+    fn as_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "first_end": self.first_end.as_json(),
+            "second_end": self.second_end.as_json(),
+        })
+    }
+
+    fn kind(&self) -> &'static str { "yield_pe" }
 }
 
 impl AddAssign<&Record> for PEYieldStats {
