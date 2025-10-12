@@ -101,6 +101,29 @@ fn init_stats(args: &Args) -> Vec<Box<Stats>> {
     stats
 }
 
+
+fn get_read_groups(header: &Header) -> HashMap<String, HashMap<String, String>> {
+    header
+        .read_groups()
+        .iter()
+        .map(|(k, map)| {
+            let read_group_id = k.to_string().to_owned();
+
+            let entry: HashMap<String, String> = std::iter::once(("ID".to_string(), read_group_id.clone()))
+                .chain(
+                    map
+                        .other_fields()
+                        .iter()
+                        .map(|(tag, value)| (format!("{}", tag), value.to_string().to_owned()))
+                )
+                .collect();
+
+            (read_group_id, entry)
+        })
+        .collect()
+}
+
+
 fn process_bam(bam_filename: &String, stats: Vec<Box<Stats>>) -> Vec<Box<Stats>> {
     // Open input file
     trace!("Opening input file: {}", bam_filename);
@@ -108,7 +131,9 @@ fn process_bam(bam_filename: &String, stats: Vec<Box<Stats>>) -> Vec<Box<Stats>>
 
     // Read the header to position the file pointer
     trace!("Reading BAM header...");
-    let _header = reader.read_header().expect("Issues reading header");
+    let header = reader.read_header().expect("Issues reading header");
+    let rg = get_read_groups(&header);
+    debug!("Read groups found: {:?}", rg);
 
     // Auxiliar add_record function
     fn add_record_to_stats(mut stats: Vec<Box<Stats>>, record: &Record) -> Vec<Box<Stats>> {
