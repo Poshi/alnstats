@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::ops::AddAssign;
 use log::trace;
 use serde::ser::{SerializeStruct, Serializer};
 use serde::Serialize;
@@ -182,6 +183,12 @@ impl AddRecord for DuplicateStats {
                 self.read_pair_optical_duplicates += sq_dup as u64;
             }
         }
+    }
+}
+
+impl AddAssign<&Record> for DuplicateStats {
+    fn add_assign(&mut self, rhs: &Record) {
+        self.add_record(rhs);
     }
 }
 

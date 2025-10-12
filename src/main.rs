@@ -71,9 +71,9 @@ enum Stats {
 impl AddRecord for Stats {
     fn add_record(&mut self, record: &Record) {
         match self {
-            Stats::Yield(yield_stats) => yield_stats.add_record(record),
-            Stats::Duplicate(dup_stats) => dup_stats.add_record(record),
-        }
+            Stats::Yield(yield_stats) => *yield_stats += record,
+            Stats::Duplicate(dup_stats) => *dup_stats += record,
+        };
     }
 }
 
