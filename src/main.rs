@@ -3,6 +3,7 @@ mod yield_stats;
 mod duplicate_stats;
 mod runtime_error;
 
+use std::collections::HashMap;
 use std::fmt;
 use std::fs;
 use serde::Serialize;
@@ -11,6 +12,8 @@ use clap::{Parser, ValueEnum};
 use clap_verbosity_flag::Verbosity;
 use noodles::bam::io::reader::Builder;
 use noodles::bam::Record;
+use noodles::sam::Header;
+use noodles::sam::alignment::record::data::field::{Tag, Value};
 
 use crate::yield_stats::PEYieldStats;
 use crate::duplicate_stats::DuplicateStats;
@@ -123,6 +126,16 @@ fn get_read_groups(header: &Header) -> HashMap<String, HashMap<String, String>> 
         .collect()
 }
 
+fn get_rg_tag(record: &Record) -> Option<String> {
+    record
+        .data()
+        .get(&Tag::READ_GROUP)
+        .and_then(|result| result.ok())
+        .and_then(|value| match value {
+            Value::String(s) => Some(s.to_string()),
+            _ => None, // RG debería ser siempre String, pero por si acaso
+        })
+}
 
 fn process_bam(bam_filename: &String, stats: Vec<Box<Stats>>) -> Vec<Box<Stats>> {
     // Open input file
@@ -137,6 +150,15 @@ fn process_bam(bam_filename: &String, stats: Vec<Box<Stats>>) -> Vec<Box<Stats>>
 
     // Auxiliar add_record function
     fn add_record_to_stats(mut stats: Vec<Box<Stats>>, record: &Record) -> Vec<Box<Stats>> {
+        let rg = get_rg_tag(&record);
+        /*
+        let rg_str = match rg {
+            Some(rg_id) => rg_id,
+            None => String::from(""),
+        };
+        trace!("RG: {rg_str}");
+        */
+
         for stat in stats.iter_mut() {
             stat.add_record(record);
         }
