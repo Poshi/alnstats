@@ -4,7 +4,7 @@ use serde::Serialize;
 use noodles::bam::Record;
 use crate::add_record::AddRecord;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq)]
 pub struct SEYieldStats {
     n_reads: u64,
     max_length: u64,
@@ -27,6 +27,7 @@ impl SEYieldStats {
 impl AddRecord for SEYieldStats {
     fn add_record(&mut self, rhs: &Record) {
         let seq_length = rhs.sequence().len() as u64;
+
         self.n_reads += 1;
         self.max_length = self.max_length.max(seq_length);
         //self.clipped_yield += rhs.cigar().clipped_length() as u64;
@@ -41,7 +42,7 @@ impl AddAssign<&Record> for SEYieldStats {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq)]
 pub struct PEYieldStats {
     first_end: SEYieldStats,
     second_end: SEYieldStats,
@@ -76,6 +77,11 @@ impl AddRecord for PEYieldStats {
     }
 }
 
+impl AddAssign<&Record> for PEYieldStats {
+    fn add_assign(&mut self, rhs: &Record) {
+        self.add_record(rhs);
+    }
+}
 
 #[cfg(test)]
 mod tests {
