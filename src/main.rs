@@ -86,7 +86,7 @@ fn init_stats(args: &Args) -> Vec<Box<dyn Statistic>> {
 
     if args.yield_out.is_some() {
         trace!("Creating stats object for PEYieldStats");
-        stats.push(Box::new(PEYieldStats::new()));
+        stats.push(Box::new(PEYieldStats::default()));
     }
 
     stats

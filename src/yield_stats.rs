@@ -1,29 +1,17 @@
 use crate::cigar_ext::CigarExt;
 use crate::constants::StatisticKind;
 use crate::statistic::Statistic;
-use log::{trace, warn};
+use log::warn;
 use noodles::bam::Record;
 use serde::Serialize;
 use std::ops::AddAssign;
 
-#[derive(Debug, Serialize, PartialEq, Clone)]
+#[derive(Debug, Serialize, PartialEq, Clone, Default)]
 pub struct SEYieldStats {
     n_reads: u64,
     max_length: u64,
     clipped_yield: u64,
     total_yield: u64,
-}
-
-impl SEYieldStats {
-    pub fn new() -> Self {
-        trace!("Creating SEYieldStats struct");
-        SEYieldStats {
-            n_reads: 0,
-            max_length: 0,
-            clipped_yield: 0,
-            total_yield: 0,
-        }
-    }
 }
 
 impl Statistic for SEYieldStats {
@@ -75,20 +63,10 @@ impl AddAssign<&Self> for SEYieldStats {
     }
 }
 
-#[derive(Debug, Serialize, PartialEq, Clone)]
+#[derive(Debug, Serialize, PartialEq, Clone, Default)]
 pub struct PEYieldStats {
     first_end: SEYieldStats,
     second_end: SEYieldStats,
-}
-
-impl PEYieldStats {
-    pub fn new() -> Self {
-        trace!("Creating PEYieldStats struct");
-        PEYieldStats {
-            first_end: SEYieldStats::new(),
-            second_end: SEYieldStats::new(),
-        }
-    }
 }
 
 impl Statistic for PEYieldStats {
@@ -149,7 +127,7 @@ mod tests {
 
     #[test]
     fn new_seyieldstats() {
-        let result = SEYieldStats::new();
+        let result = SEYieldStats::default();
         assert_eq!(
             result,
             SEYieldStats {
@@ -163,7 +141,7 @@ mod tests {
 
     #[test]
     fn new_peyieldstats() {
-        let result = PEYieldStats::new();
+        let result = PEYieldStats::default();
         assert_eq!(
             result,
             PEYieldStats {
