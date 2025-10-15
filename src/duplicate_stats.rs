@@ -13,16 +13,16 @@ use std::ops::AddAssign;
 pub struct DuplicateStats {
     duplicate_type_tags: HashSet<String>,
     unpaired_reads_examined: u64,
-    _read_pairs_examined: u64,
+    pvt_read_pairs_examined: u64,
     secondary_or_supplementary_rds: u64,
     unmapped_reads: u64,
     unpaired_read_duplicates: u64,
-    _read_pair_duplicates: u64,
-    _read_pair_optical_duplicates: u64,
+    pvt_read_pair_duplicates: u64,
+    pvt_read_pair_optical_duplicates: u64,
 }
 
 impl DuplicateStats {
-    pub fn new(duplicate_type_tag: &Vec<String>) -> Self {
+    pub fn new(duplicate_type_tag: &[String]) -> Self {
         trace!("Creating DuplicateStats struct");
 
         let dt_tags: HashSet<String> = if duplicate_type_tag.is_empty() {
@@ -34,25 +34,25 @@ impl DuplicateStats {
         DuplicateStats {
             duplicate_type_tags: dt_tags,
             unpaired_reads_examined: 0,
-            _read_pairs_examined: 0,
+            pvt_read_pairs_examined: 0,
             secondary_or_supplementary_rds: 0,
             unmapped_reads: 0,
             unpaired_read_duplicates: 0,
-            _read_pair_duplicates: 0,
-            _read_pair_optical_duplicates: 0,
+            pvt_read_pair_duplicates: 0,
+            pvt_read_pair_optical_duplicates: 0,
         }
     }
 
     pub fn read_pairs_examined(&self) -> u64 {
-        self._read_pairs_examined / 2
+        self.pvt_read_pairs_examined / 2
     }
 
     pub fn read_pair_duplicates(&self) -> u64 {
-        self._read_pair_duplicates / 2
+        self.pvt_read_pair_duplicates / 2
     }
 
     pub fn read_pair_optical_duplicates(&self) -> u64 {
-        self._read_pair_optical_duplicates / 2
+        self.pvt_read_pair_optical_duplicates / 2
     }
 
     pub fn percent_duplication(&self) -> f64 {
@@ -97,7 +97,7 @@ impl DuplicateStats {
         /// C = number of distinct fragments observed in read pairs
         ///
         /// Raises:
-        /// RuntimeError: if read pairs or duplicate pairs are zero
+        /// `RuntimeError`: if read pairs or duplicate pairs are zero
         ///
         /// Returns:
         /// u64: the estimated size of the library
@@ -106,14 +106,14 @@ impl DuplicateStats {
         }
 
         fn mid(x: f64, y: f64) -> f64 {
-            (x + y) / 2.0
+            f64::midpoint(x, y)
         }
 
         let read_pairs = self.read_pairs_examined() - self.read_pair_optical_duplicates();
         let unique_read_pairs = self.read_pairs_examined() - self.read_pair_duplicates();
         let read_pair_duplicates = read_pairs - unique_read_pairs;
 
-        if read_pairs <= 0 || read_pair_duplicates <= 0 {
+        if read_pairs == 0 || read_pair_duplicates == 0 {
             return Err(RuntimeError(String::from(
                 "Read pairs or duplicate pairs are zero!",
             )));
@@ -130,8 +130,7 @@ impl DuplicateStats {
             ) < 0.0
         {
             return Err(RuntimeError(format!(
-                "Invalid values for pairs and unique pairs: {}, {}",
-                read_pairs, unique_read_pairs
+                "Invalid values for pairs and unique pairs: {read_pairs}, {unique_read_pairs}"
             )));
         }
 
@@ -196,29 +195,29 @@ impl Statistic for DuplicateStats {
         } else if !flags.is_segmented() || flags.is_mate_unmapped() {
             self.unpaired_reads_examined += 1;
         } else {
-            self._read_pairs_examined += 1;
+            self.pvt_read_pairs_examined += 1;
         }
 
-        if flags.is_duplicate() {
-            if !(flags.is_supplementary() || flags.is_secondary()) && !flags.is_unmapped() {
-                if !flags.is_segmented() || flags.is_mate_unmapped() {
-                    self.unpaired_read_duplicates += 1
-                } else {
-                    self._read_pair_duplicates += 1;
+        if flags.is_duplicate()
+            && !(flags.is_supplementary() || flags.is_secondary() || flags.is_unmapped())
+        {
+            if !flags.is_segmented() || flags.is_mate_unmapped() {
+                self.unpaired_read_duplicates += 1;
+            } else {
+                self.pvt_read_pair_duplicates += 1;
 
-                    let sq_dup = rhs
-                        .data()
-                        .iter()
-                        .filter_map(Result::ok)
-                        .any(|(tag, value)| {
-                            // Convert tag (2 bytes) to String for comparison
-                            let tag_str = std::str::from_utf8(tag.as_ref()).unwrap_or("");
+                let sq_dup = rhs
+                    .data()
+                    .iter()
+                    .filter_map(Result::ok)
+                    .any(|(tag, value)| {
+                        // Convert tag (2 bytes) to String for comparison
+                        let tag_str = std::str::from_utf8(tag.as_ref()).unwrap_or("");
 
-                            self.duplicate_type_tags.contains(tag_str)
-                                && matches!(value, Value::String(s) if s == SEQ_DUP_VALUE)
-                        });
-                    self._read_pair_optical_duplicates += sq_dup as u64;
-                }
+                        self.duplicate_type_tags.contains(tag_str)
+                            && matches!(value, Value::String(s) if s == SEQ_DUP_VALUE)
+                    });
+                self.pvt_read_pair_optical_duplicates += u64::from(sq_dup);
             }
         }
     }
@@ -252,12 +251,12 @@ impl AddAssign<&Self> for DuplicateStats {
     fn add_assign(&mut self, rhs: &Self) {
         assert_eq!(self.duplicate_type_tags, rhs.duplicate_type_tags);
         self.unpaired_reads_examined += rhs.unpaired_reads_examined;
-        self._read_pairs_examined += rhs._read_pairs_examined;
+        self.pvt_read_pairs_examined += rhs.pvt_read_pairs_examined;
         self.secondary_or_supplementary_rds += rhs.secondary_or_supplementary_rds;
         self.unmapped_reads += rhs.unmapped_reads;
         self.unpaired_read_duplicates += rhs.unpaired_read_duplicates;
-        self._read_pair_duplicates += rhs._read_pair_duplicates;
-        self._read_pair_optical_duplicates += rhs._read_pair_optical_duplicates;
+        self.pvt_read_pair_duplicates += rhs.pvt_read_pair_duplicates;
+        self.pvt_read_pair_optical_duplicates += rhs.pvt_read_pair_optical_duplicates;
     }
 }
 
@@ -284,22 +283,22 @@ mod tests {
         let mut stats1 = DuplicateStats {
             duplicate_type_tags: HashSet::from_iter(vec![DEFAULT_DUP_TAG.to_string()]),
             unpaired_reads_examined: 10,
-            _read_pairs_examined: 100,
+            pvt_read_pairs_examined: 100,
             secondary_or_supplementary_rds: 5,
             unmapped_reads: 2,
             unpaired_read_duplicates: 1,
-            _read_pair_duplicates: 10,
-            _read_pair_optical_duplicates: 3,
+            pvt_read_pair_duplicates: 10,
+            pvt_read_pair_optical_duplicates: 3,
         };
         let stats2 = DuplicateStats {
             duplicate_type_tags: HashSet::from_iter(vec![DEFAULT_DUP_TAG.to_string()]),
             unpaired_reads_examined: 20,
-            _read_pairs_examined: 200,
+            pvt_read_pairs_examined: 200,
             secondary_or_supplementary_rds: 10,
             unmapped_reads: 4,
             unpaired_read_duplicates: 2,
-            _read_pair_duplicates: 20,
-            _read_pair_optical_duplicates: 6,
+            pvt_read_pair_duplicates: 20,
+            pvt_read_pair_optical_duplicates: 6,
         };
         stats1 += &stats2;
 
@@ -307,11 +306,11 @@ mod tests {
 
         assert_eq!(stats1.duplicate_type_tags, expected_tags);
         assert_eq!(stats1.unpaired_reads_examined, 30);
-        assert_eq!(stats1._read_pairs_examined, 300);
+        assert_eq!(stats1.pvt_read_pairs_examined, 300);
         assert_eq!(stats1.secondary_or_supplementary_rds, 15);
         assert_eq!(stats1.unmapped_reads, 6);
         assert_eq!(stats1.unpaired_read_duplicates, 3);
-        assert_eq!(stats1._read_pair_duplicates, 30);
-        assert_eq!(stats1._read_pair_optical_duplicates, 9);
+        assert_eq!(stats1.pvt_read_pair_duplicates, 30);
+        assert_eq!(stats1.pvt_read_pair_optical_duplicates, 9);
     }
 }

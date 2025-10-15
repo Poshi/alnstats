@@ -15,6 +15,7 @@ use noodles::sam::alignment::record::data::field::{Tag, Value};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
+use std::io::BufWriter;
 
 use crate::constants::{
     DEFAULT_DUP_TAG, KIND_DUPLICATE, KIND_YIELD_PE, KIND_YIELD_SE, RG_ID_TAG, RG_LIBRARY_TAG,
@@ -36,7 +37,7 @@ impl fmt::Display for Aggregation {
             Aggregation::Sample => "sample",
             Aggregation::Library => "library",
         };
-        write!(f, "{}", fmt_str)
+        write!(f, "{fmt_str}")
     }
 }
 
@@ -92,14 +93,14 @@ fn get_read_groups(header: &Header) -> HashMap<String, HashMap<String, String>> 
         .read_groups()
         .iter()
         .map(|(k, map)| {
-            let read_group_id = k.to_string().to_owned();
+            let read_group_id = k.to_string().clone();
 
             let entry: HashMap<String, String> =
                 std::iter::once((RG_ID_TAG.to_string(), read_group_id.clone()))
                     .chain(
                         map.other_fields()
                             .iter()
-                            .map(|(tag, value)| (format!("{}", tag), value.to_string().to_owned())),
+                            .map(|(tag, value)| (format!("{tag}"), value.to_string().clone())),
                     )
                     .collect();
 
@@ -112,32 +113,31 @@ fn get_rg_tag(record: &Record) -> Option<String> {
     record
         .data()
         .get(&Tag::READ_GROUP)
-        .and_then(|result| result.ok())
+        .and_then(std::result::Result::ok)
         .and_then(|value| match value {
             Value::String(s) => Some(s.to_string()),
             _ => None, // RG should always be a String, but just in case
         })
 }
 
-fn process_bam(
-    bam_filename: &String,
-    args: &Args,
-) -> Result<(Header, HashMap<String, Vec<Box<dyn Statistic>>>), Box<dyn Error>> {
+type StatsPerRG = HashMap<String, Vec<Box<dyn Statistic>>>;
+
+fn process_bam(bam_filename: &String, args: &Args) -> Result<(Header, StatsPerRG), Box<dyn Error>> {
     // Open input file
-    trace!("Opening input file: {}", bam_filename);
-    let mut reader = Builder::default().build_from_path(bam_filename)?;
+    trace!("Opening input file: {bam_filename}");
+    let mut reader = Builder.build_from_path(bam_filename)?;
 
     // Read the header to position the file pointer
     trace!("Reading BAM header...");
     let header = reader.read_header()?;
 
-    let mut stats_per_rg: HashMap<String, Vec<Box<dyn Statistic>>> = HashMap::new();
+    let mut stats_per_rg: StatsPerRG = HashMap::new();
 
     // Traverse input file while filling in the stats
     trace!("Processing BAM records...");
     for (i, rec) in reader.records().enumerate() {
         if i > 0 && i % 10_000_000 == 0 {
-            info!("{} elements processed...", i);
+            info!("{i} elements processed...");
         }
 
         match rec {
@@ -153,8 +153,7 @@ fn process_bam(
                 }
             }
             Err(e) => {
-                error!("Error reading record {}: {}", i, e);
-                continue;
+                error!("Error reading record {i}: {e}");
             }
         }
     }
@@ -162,12 +161,8 @@ fn process_bam(
     Ok((header, stats_per_rg))
 }
 
-fn aggregate_stats(
-    stats_per_rg: &HashMap<String, Vec<Box<dyn Statistic>>>,
-    header: &Header,
-    args: &Args,
-) -> HashMap<String, Vec<Box<dyn Statistic>>> {
-    let mut aggregated_stats: HashMap<String, Vec<Box<dyn Statistic>>> = HashMap::new();
+fn aggregate_stats(stats_per_rg: &StatsPerRG, header: &Header, args: &Args) -> StatsPerRG {
+    let mut aggregated_stats: StatsPerRG = HashMap::new();
     let read_groups_info = get_read_groups(header);
 
     for (rg_id, stats_vec) in stats_per_rg {
@@ -187,7 +182,7 @@ fn aggregate_stats(
                     .and_then(|rg| rg.get(RG_LIBRARY_TAG))
                     .cloned()
                     .unwrap_or_else(|| UNKNOWN.to_string());
-                format!("{}	{}", sample, library)
+                format!("{sample} {library}")
             }
         };
 
@@ -203,13 +198,8 @@ fn aggregate_stats(
     aggregated_stats
 }
 
-fn write_results(
-    stats_per_rg: &HashMap<String, Vec<Box<dyn Statistic>>>,
-    args: &Args,
-) -> Result<(), Box<dyn Error>> {
+fn write_results(stats_per_rg: &StatsPerRG, args: &Args) -> Result<(), Box<dyn Error>> {
     trace!("Generating JSON output...");
-
-    use std::io::BufWriter;
 
     let mut yield_results = serde_json::Map::new();
     let mut duplicate_results = serde_json::Map::new();
@@ -228,7 +218,7 @@ fn write_results(
                     _ => {}
                 },
                 Aggregation::Library => {
-                    let parts: Vec<&str> = key.splitn(2, '\t').collect();
+                    let parts: Vec<&str> = key.splitn(2, ' ').collect();
                     if parts.len() == 2 {
                         let sample_name = parts[0].to_string();
                         let library_name = parts[1].to_string();
@@ -253,14 +243,14 @@ fn write_results(
     }
 
     if let Some(filename) = &args.yield_out {
-        trace!("Output will be written to: {}", filename);
+        trace!("Output will be written to: {filename}");
         let file = std::fs::File::create(filename)?;
         let writer = BufWriter::new(file);
         serde_json::to_writer_pretty(writer, &yield_results)?;
     }
 
     if let Some(filename) = &args.metrics {
-        trace!("Output will be written to: {}", filename);
+        trace!("Output will be written to: {filename}");
         let file = std::fs::File::create(filename)?;
         let writer = BufWriter::new(file);
         serde_json::to_writer_pretty(writer, &duplicate_results)?;
@@ -278,19 +268,19 @@ fn main() {
         .filter_level(args.verbosity.log_level_filter())
         .init();
 
-    debug!("Arguments: {:?}", args);
+    debug!("Arguments: {args:?}");
 
     // Process the BAM file, filling in the stats objects
     match process_bam(&args.input, &args) {
         Ok((header, stats_per_rg)) => {
             let aggregated_stats = aggregate_stats(&stats_per_rg, &header, &args);
             if let Err(e) = write_results(&aggregated_stats, &args) {
-                error!("Error writing results: {}", e);
+                error!("Error writing results: {e}");
                 std::process::exit(1);
             }
         }
         Err(e) => {
-            error!("Error processing BAM file: {}", e);
+            error!("Error processing BAM file: {e}");
             std::process::exit(1);
         }
     }
