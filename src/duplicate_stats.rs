@@ -4,6 +4,7 @@ use crate::statistic::Statistic;
 use log::trace;
 use noodles::bam::Record;
 use noodles::sam::alignment::record::data::field::value::Value;
+use noodles::sam::alignment::record::Flags;
 use serde::Serialize;
 use serde::ser::{SerializeStruct, Serializer};
 use std::collections::HashSet;
@@ -187,6 +188,22 @@ impl DuplicateStats {
 impl Statistic for DuplicateStats {
 
     fn add_record(&mut self, rhs: &Record) {
+        fn is_unmapped_read(flags: &Flags) -> bool {
+            flags.is_unmapped()
+        }
+
+        fn is_secondary_or_supplementary(flags: &Flags) -> bool {
+            flags.is_supplementary() || flags.is_secondary()
+        }
+
+        fn is_unpaired_read(flags: &Flags) -> bool {
+            !flags.is_segmented() || flags.is_mate_unmapped()
+        }
+
+        fn is_valid_duplicate_candidate(flags: &Flags) -> bool {
+            flags.is_duplicate() && !(flags.is_supplementary() || flags.is_secondary() || flags.is_unmapped())
+        }
+
         fn is_optical_duplicate(record: &Record, duplicate_type_tags: &HashSet<String>) -> bool {
             record
                 .data()
@@ -203,20 +220,18 @@ impl Statistic for DuplicateStats {
 
         let flags = rhs.flags();
 
-        if flags.is_unmapped() {
+        if is_unmapped_read(&flags) {
             self.unmapped_reads += 1;
-        } else if flags.is_supplementary() || flags.is_secondary() {
+        } else if is_secondary_or_supplementary(&flags) {
             self.secondary_or_supplementary_rds += 1;
-        } else if !flags.is_segmented() || flags.is_mate_unmapped() {
+        } else if is_unpaired_read(&flags) {
             self.unpaired_reads_examined += 1;
         } else {
             self.pvt_read_pairs_examined += 1;
         }
 
-        if flags.is_duplicate()
-            && !(flags.is_supplementary() || flags.is_secondary() || flags.is_unmapped())
-        {
-            if !flags.is_segmented() || flags.is_mate_unmapped() {
+        if is_valid_duplicate_candidate(&flags) {
+            if is_unpaired_read(&flags) {
                 self.unpaired_read_duplicates += 1;
             } else {
                 self.pvt_read_pair_duplicates += 1;
