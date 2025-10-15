@@ -1,26 +1,28 @@
-mod statistic;
-mod yield_stats;
-mod duplicate_stats;
-mod runtime_error;
 mod cigar_ext;
 mod constants;
+mod duplicate_stats;
+mod runtime_error;
+mod statistic;
+mod yield_stats;
 
+use clap::{Parser, ValueEnum};
+use clap_verbosity_flag::Verbosity;
+use log::{debug, error, info, trace};
+use noodles::bam::Record;
+use noodles::bam::io::reader::Builder;
+use noodles::sam::Header;
+use noodles::sam::alignment::record::data::field::{Tag, Value};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
-use log::{error, info, debug, trace};
-use clap::{Parser, ValueEnum};
-use clap_verbosity_flag::Verbosity;
-use noodles::bam::io::reader::Builder;
-use noodles::bam::Record;
-use noodles::sam::Header;
-use noodles::sam::alignment::record::data::field::{Tag, Value};
 
-use crate::yield_stats::PEYieldStats;
+use crate::constants::{
+    DEFAULT_DUP_TAG, KIND_DUPLICATE, KIND_YIELD_PE, KIND_YIELD_SE, RG_ID_TAG, RG_LIBRARY_TAG,
+    RG_SAMPLE_TAG, UNKNOWN,
+};
 use crate::duplicate_stats::DuplicateStats;
 use crate::statistic::Statistic;
-use crate::constants::{DEFAULT_DUP_TAG, KIND_YIELD_SE, KIND_YIELD_PE, KIND_DUPLICATE, RG_ID_TAG, RG_SAMPLE_TAG, RG_LIBRARY_TAG, UNKNOWN};
-
+use crate::yield_stats::PEYieldStats;
 
 #[derive(Debug, Clone, ValueEnum)]
 enum Aggregation {
@@ -51,7 +53,7 @@ struct Args {
     metrics: Option<String>,
 
     /// Output file for the aggregate yield results
-    #[arg(short, long="yield", value_name="YIELD")]
+    #[arg(short, long = "yield", value_name = "YIELD")]
     yield_out: Option<String>,
 
     /// The tag names used for marking the duplicate type
@@ -85,7 +87,6 @@ fn init_stats(args: &Args) -> Vec<Box<dyn Statistic>> {
     stats
 }
 
-
 fn get_read_groups(header: &Header) -> HashMap<String, HashMap<String, String>> {
     header
         .read_groups()
@@ -93,14 +94,14 @@ fn get_read_groups(header: &Header) -> HashMap<String, HashMap<String, String>> 
         .map(|(k, map)| {
             let read_group_id = k.to_string().to_owned();
 
-            let entry: HashMap<String, String> = std::iter::once((RG_ID_TAG.to_string(), read_group_id.clone()))
-                .chain(
-                    map
-                        .other_fields()
-                        .iter()
-                        .map(|(tag, value)| (format!("{}", tag), value.to_string().to_owned()))
-                )
-                .collect();
+            let entry: HashMap<String, String> =
+                std::iter::once((RG_ID_TAG.to_string(), read_group_id.clone()))
+                    .chain(
+                        map.other_fields()
+                            .iter()
+                            .map(|(tag, value)| (format!("{}", tag), value.to_string().to_owned())),
+                    )
+                    .collect();
 
             (read_group_id, entry)
         })
@@ -118,7 +119,10 @@ fn get_rg_tag(record: &Record) -> Option<String> {
         })
 }
 
-fn process_bam(bam_filename: &String, args: &Args) -> Result<(Header, HashMap<String, Vec<Box<dyn Statistic>>>), Box<dyn Error>> {
+fn process_bam(
+    bam_filename: &String,
+    args: &Args,
+) -> Result<(Header, HashMap<String, Vec<Box<dyn Statistic>>>), Box<dyn Error>> {
     // Open input file
     trace!("Opening input file: {}", bam_filename);
     let mut reader = Builder::default().build_from_path(bam_filename)?;
@@ -147,7 +151,7 @@ fn process_bam(bam_filename: &String, args: &Args) -> Result<(Header, HashMap<St
                 for stat in stats.iter_mut() {
                     stat.add_record(&record);
                 }
-            },
+            }
             Err(e) => {
                 error!("Error reading record {}: {}", i, e);
                 continue;
@@ -158,7 +162,11 @@ fn process_bam(bam_filename: &String, args: &Args) -> Result<(Header, HashMap<St
     Ok((header, stats_per_rg))
 }
 
-fn aggregate_stats(stats_per_rg: &HashMap<String, Vec<Box<dyn Statistic>>>, header: &Header, args: &Args) -> HashMap<String, Vec<Box<dyn Statistic>>> {
+fn aggregate_stats(
+    stats_per_rg: &HashMap<String, Vec<Box<dyn Statistic>>>,
+    header: &Header,
+    args: &Args,
+) -> HashMap<String, Vec<Box<dyn Statistic>>> {
     let mut aggregated_stats: HashMap<String, Vec<Box<dyn Statistic>>> = HashMap::new();
     let read_groups_info = get_read_groups(header);
 
@@ -171,8 +179,14 @@ fn aggregate_stats(stats_per_rg: &HashMap<String, Vec<Box<dyn Statistic>>>, head
                 .cloned()
                 .unwrap_or_else(|| UNKNOWN.to_string()),
             Aggregation::Library => {
-                let sample = rg_map.and_then(|rg| rg.get(RG_SAMPLE_TAG)).cloned().unwrap_or_else(|| UNKNOWN.to_string());
-                let library = rg_map.and_then(|rg| rg.get(RG_LIBRARY_TAG)).cloned().unwrap_or_else(|| UNKNOWN.to_string());
+                let sample = rg_map
+                    .and_then(|rg| rg.get(RG_SAMPLE_TAG))
+                    .cloned()
+                    .unwrap_or_else(|| UNKNOWN.to_string());
+                let library = rg_map
+                    .and_then(|rg| rg.get(RG_LIBRARY_TAG))
+                    .cloned()
+                    .unwrap_or_else(|| UNKNOWN.to_string());
                 format!("{}	{}", sample, library)
             }
         };
@@ -189,7 +203,10 @@ fn aggregate_stats(stats_per_rg: &HashMap<String, Vec<Box<dyn Statistic>>>, head
     aggregated_stats
 }
 
-fn write_results(stats_per_rg: &HashMap<String, Vec<Box<dyn Statistic>>>, args: &Args) -> Result<(), Box<dyn Error>> {
+fn write_results(
+    stats_per_rg: &HashMap<String, Vec<Box<dyn Statistic>>>,
+    args: &Args,
+) -> Result<(), Box<dyn Error>> {
     trace!("Generating JSON output...");
 
     use std::io::BufWriter;
@@ -201,16 +218,14 @@ fn write_results(stats_per_rg: &HashMap<String, Vec<Box<dyn Statistic>>>, args: 
         for stat in stats_vec {
             let json_val = stat.as_json();
             match args.aggregation {
-                Aggregation::Sample => {
-                     match stat.kind() {
-                        KIND_YIELD_PE | KIND_YIELD_SE => {
-                            yield_results.insert(key.clone(), json_val);
-                        }
-                        KIND_DUPLICATE => {
-                            duplicate_results.insert(key.clone(), json_val);
-                        }
-                        _ => {}
+                Aggregation::Sample => match stat.kind() {
+                    KIND_YIELD_PE | KIND_YIELD_SE => {
+                        yield_results.insert(key.clone(), json_val);
                     }
+                    KIND_DUPLICATE => {
+                        duplicate_results.insert(key.clone(), json_val);
+                    }
+                    _ => {}
                 },
                 Aggregation::Library => {
                     let parts: Vec<&str> = key.splitn(2, '\t').collect();

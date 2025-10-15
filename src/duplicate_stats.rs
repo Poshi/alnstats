@@ -4,8 +4,8 @@ use crate::statistic::Statistic;
 use log::trace;
 use noodles::bam::Record;
 use noodles::sam::alignment::record::data::field::value::Value;
-use serde::ser::{SerializeStruct, Serializer};
 use serde::Serialize;
+use serde::ser::{SerializeStruct, Serializer};
 use std::collections::HashSet;
 use std::ops::AddAssign;
 
@@ -55,7 +55,7 @@ impl DuplicateStats {
         self._read_pair_optical_duplicates / 2
     }
 
-    pub fn  percent_duplication(&self) -> f64 {
+    pub fn percent_duplication(&self) -> f64 {
         if (self.read_pairs_examined() + self.unpaired_reads_examined) == 0 {
             return 0.0;
         }
@@ -85,22 +85,22 @@ impl DuplicateStats {
     */
 
     pub fn estimated_library_size(&self) -> Result<u64, RuntimeError> {
-    /// Estimate the size of the library.
-    ///
-    /// Estimates the size of a library based on the number of paired end molecules observed
-    /// and the number of unique pairs observed.
-    /// Based on the Lander-Waterman equation that states:
-    /// C/X = 1-exp(-N/X)
-    /// where
-    /// X = number of distinct molecules in library
-    /// N = number of read pairs
-    /// C = number of distinct fragments observed in read pairs
-    ///
-    /// Raises:
-    /// RuntimeError: if read pairs or duplicate pairs are zero
-    ///
-    /// Returns:
-    /// u64: the estimated size of the library
+        /// Estimate the size of the library.
+        ///
+        /// Estimates the size of a library based on the number of paired end molecules observed
+        /// and the number of unique pairs observed.
+        /// Based on the Lander-Waterman equation that states:
+        /// C/X = 1-exp(-N/X)
+        /// where
+        /// X = number of distinct molecules in library
+        /// N = number of read pairs
+        /// C = number of distinct fragments observed in read pairs
+        ///
+        /// Raises:
+        /// RuntimeError: if read pairs or duplicate pairs are zero
+        ///
+        /// Returns:
+        /// u64: the estimated size of the library
         fn f(x: f64, c: f64, n: f64) -> f64 {
             (c / x) - 1.0 + (-n / x).exp()
         }
@@ -114,25 +114,45 @@ impl DuplicateStats {
         let read_pair_duplicates = read_pairs - unique_read_pairs;
 
         if read_pairs <= 0 || read_pair_duplicates <= 0 {
-            return Err(RuntimeError(String::from("Read pairs or duplicate pairs are zero!")));
+            return Err(RuntimeError(String::from(
+                "Read pairs or duplicate pairs are zero!",
+            )));
         }
 
         let mut lower_bound: f64 = 1.0;
         let mut upper_bound: f64 = 100.0;
 
-        if unique_read_pairs>= read_pairs || f(lower_bound * unique_read_pairs as f64, unique_read_pairs as f64, read_pairs as f64) < 0.0 {
-            return Err(RuntimeError(format!("Invalid values for pairs and unique pairs: {}, {}", read_pairs, unique_read_pairs)));
+        if unique_read_pairs >= read_pairs
+            || f(
+                lower_bound * unique_read_pairs as f64,
+                unique_read_pairs as f64,
+                read_pairs as f64,
+            ) < 0.0
+        {
+            return Err(RuntimeError(format!(
+                "Invalid values for pairs and unique pairs: {}, {}",
+                read_pairs, unique_read_pairs
+            )));
         }
 
         // Find value of upper_bound, large enough to act as other side for bisection method
-        while f(upper_bound * unique_read_pairs as f64, unique_read_pairs as f64, read_pairs as f64) > 0.0 {
+        while f(
+            upper_bound * unique_read_pairs as f64,
+            unique_read_pairs as f64,
+            read_pairs as f64,
+        ) > 0.0
+        {
             upper_bound *= 10.0;
         }
 
         // Use bisection method (no more than 40 times) to find solution
         for _ in 0..40 {
             let r = mid(lower_bound, upper_bound);
-            let u = f(r * unique_read_pairs as f64, unique_read_pairs as f64, read_pairs as f64);
+            let u = f(
+                r * unique_read_pairs as f64,
+                unique_read_pairs as f64,
+                read_pairs as f64,
+            );
             if u > 0.0 {
                 // Move lower bound up
                 lower_bound = r;
@@ -194,7 +214,8 @@ impl Statistic for DuplicateStats {
                             // Convert tag (2 bytes) to String for comparison
                             let tag_str = std::str::from_utf8(tag.as_ref()).unwrap_or("");
 
-                        self.duplicate_type_tags.contains(tag_str) && matches!(value, Value::String(s) if s == SEQ_DUP_VALUE)
+                            self.duplicate_type_tags.contains(tag_str)
+                                && matches!(value, Value::String(s) if s == SEQ_DUP_VALUE)
                         });
                     self._read_pair_optical_duplicates += sq_dup as u64;
                 }
@@ -206,7 +227,9 @@ impl Statistic for DuplicateStats {
         self.to_json_with_extra()
     }
 
-    fn kind(&self) -> &'static str { KIND_DUPLICATE }
+    fn kind(&self) -> &'static str {
+        KIND_DUPLICATE
+    }
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
@@ -240,7 +263,9 @@ impl AddAssign<&Self> for DuplicateStats {
 
 impl Serialize for DuplicateStats {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where S: Serializer {
+    where
+        S: Serializer,
+    {
         trace!("Serializing a DuplicateStats struct");
 
         let mut state = serializer.serialize_struct("DuplicateStats", 1)?;

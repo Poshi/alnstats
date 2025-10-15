@@ -45,7 +45,9 @@ impl Statistic for SEYieldStats {
         })
     }
 
-    fn kind(&self) -> &'static str { KIND_YIELD_SE }
+    fn kind(&self) -> &'static str {
+        KIND_YIELD_SE
+    }
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
@@ -113,7 +115,9 @@ impl Statistic for PEYieldStats {
         })
     }
 
-    fn kind(&self) -> &'static str { KIND_YIELD_PE }
+    fn kind(&self) -> &'static str {
+        KIND_YIELD_PE
+    }
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
@@ -146,31 +150,37 @@ mod tests {
     #[test]
     fn new_seyieldstats() {
         let result = SEYieldStats::new();
-        assert_eq!(result, SEYieldStats {
-            n_reads: 0,
-            max_length: 0,
-            clipped_yield: 0,
-            total_yield: 0,
-        });
+        assert_eq!(
+            result,
+            SEYieldStats {
+                n_reads: 0,
+                max_length: 0,
+                clipped_yield: 0,
+                total_yield: 0,
+            }
+        );
     }
 
     #[test]
     fn new_peyieldstats() {
         let result = PEYieldStats::new();
-        assert_eq!(result, PEYieldStats {
-            first_end: SEYieldStats {
-                n_reads: 0,
-                max_length: 0,
-                clipped_yield: 0,
-                total_yield: 0,
-            },
-            second_end: SEYieldStats {
-                n_reads: 0,
-                max_length: 0,
-                clipped_yield: 0,
-                total_yield: 0,
-            },
-        });
+        assert_eq!(
+            result,
+            PEYieldStats {
+                first_end: SEYieldStats {
+                    n_reads: 0,
+                    max_length: 0,
+                    clipped_yield: 0,
+                    total_yield: 0,
+                },
+                second_end: SEYieldStats {
+                    n_reads: 0,
+                    max_length: 0,
+                    clipped_yield: 0,
+                    total_yield: 0,
+                },
+            }
+        );
     }
 
     #[test]
@@ -188,12 +198,15 @@ mod tests {
             total_yield: 2000,
         };
         stats1 += &stats2;
-        assert_eq!(stats1, SEYieldStats {
-            n_reads: 30,
-            max_length: 150,
-            clipped_yield: 15,
-            total_yield: 3000,
-        });
+        assert_eq!(
+            stats1,
+            SEYieldStats {
+                n_reads: 30,
+                max_length: 150,
+                clipped_yield: 15,
+                total_yield: 3000,
+            }
+        );
     }
 
     #[test]
@@ -227,19 +240,22 @@ mod tests {
             },
         };
         stats1 += &stats2;
-        assert_eq!(stats1, PEYieldStats {
-            first_end: SEYieldStats {
-                n_reads: 30,
-                max_length: 150,
-                clipped_yield: 15,
-                total_yield: 3000,
-            },
-            second_end: SEYieldStats {
-                n_reads: 30,
-                max_length: 150,
-                clipped_yield: 15,
-                total_yield: 3000,
-            },
-        });
+        assert_eq!(
+            stats1,
+            PEYieldStats {
+                first_end: SEYieldStats {
+                    n_reads: 30,
+                    max_length: 150,
+                    clipped_yield: 15,
+                    total_yield: 3000,
+                },
+                second_end: SEYieldStats {
+                    n_reads: 30,
+                    max_length: 150,
+                    clipped_yield: 15,
+                    total_yield: 3000,
+                },
+            }
+        );
     }
 }
