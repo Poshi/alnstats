@@ -42,6 +42,12 @@ impl fmt::Display for Aggregation {
     }
 }
 
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
+enum AggregationKey {
+    Sample(String),
+    Library(String, String),
+}
+
 /// Simple program to greet a person
 #[derive(Debug, Parser)]
 #[command(version, about, long_about = None)]
@@ -121,12 +127,13 @@ fn get_rg_tag(record: &Record) -> Option<String> {
         })
 }
 
-type StatsPerKey = HashMap<String, Vec<Box<dyn Statistic>>>;
+type StatsPerRG = HashMap<String, Vec<Box<dyn Statistic>>>;
+type StatsPerKey = HashMap<AggregationKey, Vec<Box<dyn Statistic>>>;
 
 fn process_bam(
     bam_filename: &String,
     args: &Args,
-) -> Result<(Header, StatsPerKey), Box<dyn Error>> {
+) -> Result<(Header, StatsPerRG), Box<dyn Error>> {
     // Open input file
     trace!("Opening input file: {bam_filename}");
     let mut reader = Builder.build_from_path(bam_filename)?;
@@ -135,7 +142,7 @@ fn process_bam(
     trace!("Reading BAM header...");
     let header = reader.read_header()?;
 
-    let mut stats_per_rg: StatsPerKey = HashMap::new();
+    let mut stats_per_rg: StatsPerRG = HashMap::new();
 
     // Traverse input file while filling in the stats
     trace!("Processing BAM records...");
@@ -165,7 +172,11 @@ fn process_bam(
     Ok((header, stats_per_rg))
 }
 
-fn aggregate_stats(stats_per_rg: &StatsPerKey, header: &Header, args: &Args) -> StatsPerKey {
+fn aggregate_stats(
+    stats_per_rg: &StatsPerRG,
+    header: &Header,
+    args: &Args,
+) -> HashMap<AggregationKey, Vec<Box<dyn Statistic>>> {
     let mut aggregated_stats: StatsPerKey = HashMap::new();
     let read_groups_info = get_read_groups(header);
 
@@ -173,10 +184,12 @@ fn aggregate_stats(stats_per_rg: &StatsPerKey, header: &Header, args: &Args) -> 
         let rg_map = read_groups_info.get(rg_id);
 
         let aggregation_key = match args.aggregation {
-            Aggregation::Sample => rg_map
-                .and_then(|rg| rg.get(RG_SAMPLE_TAG))
-                .cloned()
-                .unwrap_or_else(|| UNKNOWN.to_string()),
+            Aggregation::Sample => AggregationKey::Sample(
+                rg_map
+                    .and_then(|rg| rg.get(RG_SAMPLE_TAG))
+                    .cloned()
+                    .unwrap_or_else(|| UNKNOWN.to_string()),
+            ),
             Aggregation::Library => {
                 let sample = rg_map
                     .and_then(|rg| rg.get(RG_SAMPLE_TAG))
@@ -186,7 +199,7 @@ fn aggregate_stats(stats_per_rg: &StatsPerKey, header: &Header, args: &Args) -> 
                     .and_then(|rg| rg.get(RG_LIBRARY_TAG))
                     .cloned()
                     .unwrap_or_else(|| UNKNOWN.to_string());
-                format!("{sample} {library}")
+                AggregationKey::Library(sample, library)
             }
         };
 
@@ -202,7 +215,10 @@ fn aggregate_stats(stats_per_rg: &StatsPerKey, header: &Header, args: &Args) -> 
     aggregated_stats
 }
 
-fn write_results(stats_per_aggregate_key: &StatsPerKey, args: &Args) -> Result<(), Box<dyn Error>> {
+fn write_results(
+    stats_per_aggregate_key: &StatsPerKey,
+    args: &Args,
+) -> Result<(), Box<dyn Error>> {
     trace!("Generating JSON output...");
 
     let mut yield_results = serde_json::Map::new();
@@ -211,21 +227,17 @@ fn write_results(stats_per_aggregate_key: &StatsPerKey, args: &Args) -> Result<(
     for (key, stats_vec) in stats_per_aggregate_key {
         for stat in stats_vec {
             let json_val = stat.as_json();
-            match args.aggregation {
-                Aggregation::Sample => match stat.kind() {
+            match key {
+                AggregationKey::Sample(sample_name) => match stat.kind() {
                     KIND_YIELD_PE | KIND_YIELD_SE => {
-                        yield_results.insert(key.clone(), json_val);
+                        yield_results.insert(sample_name.clone(), json_val);
                     }
                     KIND_DUPLICATE => {
-                        duplicate_results.insert(key.clone(), json_val);
+                        duplicate_results.insert(sample_name.clone(), json_val);
                     }
                     _ => {}
                 },
-                Aggregation::Library => {
-                    let parts: Vec<&str> = key.splitn(2, ' ').collect();
-                    let sample_name = parts[0].to_string();
-                    let library_name = parts[1].to_string();
-
+                AggregationKey::Library(sample_name, library_name) => {
                     let target_map = match stat.kind() {
                         KIND_YIELD_PE | KIND_YIELD_SE => &mut yield_results,
                         KIND_DUPLICATE => &mut duplicate_results,
@@ -233,11 +245,11 @@ fn write_results(stats_per_aggregate_key: &StatsPerKey, args: &Args) -> Result<(
                     };
 
                     let sample_entry = target_map
-                        .entry(sample_name)
+                        .entry(sample_name.clone())
                         .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
 
                     if let Some(sample_map) = sample_entry.as_object_mut() {
-                        sample_map.insert(library_name, json_val);
+                        sample_map.insert(library_name.clone(), json_val);
                     }
                 }
             }
