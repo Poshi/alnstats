@@ -6,7 +6,6 @@ use noodles::bam::Record;
 use noodles::sam::alignment::record::data::field::value::Value;
 use noodles::sam::alignment::record::Flags;
 use serde::Serialize;
-use serde::ser::{SerializeStruct, Serializer};
 use std::collections::HashSet;
 use std::ops::AddAssign;
 
@@ -167,23 +166,6 @@ impl DuplicateStats {
         Ok((unique_read_pairs as f64 * mid(lower_bound, upper_bound)) as u64)
     }
 
-    pub fn to_json_with_extra(&self) -> serde_json::Value {
-        trace!("Generating enriched JSON for DuplicateStats");
-        serde_json::json!(
-            {
-                "UNPAIRED_READS_EXAMINED": self.unpaired_reads_examined,
-                "READ_PAIRS_EXAMINED": self.read_pairs_examined(),
-                "SECONDARY_OR_SUPPLEMENTARY_RDS": self.secondary_or_supplementary_rds,
-                "UNMAPPED_READS": self.unmapped_reads,
-                "UNPAIRED_READ_DUPLICATES": self.unpaired_read_duplicates,
-                "READ_PAIR_DUPLICATES": self.read_pair_duplicates(),
-                "READ_PAIR_OPTICAL_DUPLICATES": self.read_pair_optical_duplicates(),
-                "PERCENT_DUPLICATION": self.percent_duplication(),
-                "ESTIMATED_LIBRARY_SIZE": self.estimated_library_size().unwrap_or(0),
-            }
-        )
-    }
-
     fn is_unmapped_read(flags: &Flags) -> bool {
         flags.is_unmapped()
     }
@@ -216,6 +198,44 @@ impl DuplicateStats {
 
 }
 
+#[derive(Debug, Serialize)]
+pub struct DuplicateStatsJson {
+    #[serde(rename = "UNPAIRED_READS_EXAMINED")]
+    unpaired_reads_examined: u64,
+    #[serde(rename = "READ_PAIRS_EXAMINED")]
+    read_pairs_examined: u64,
+    #[serde(rename = "SECONDARY_OR_SUPPLEMENTARY_RDS")]
+    secondary_or_supplementary_rds: u64,
+    #[serde(rename = "UNMAPPED_READS")]
+    unmapped_reads: u64,
+    #[serde(rename = "UNPAIRED_READ_DUPLICATES")]
+    unpaired_read_duplicates: u64,
+    #[serde(rename = "READ_PAIR_DUPLICATES")]
+    read_pair_duplicates: u64,
+    #[serde(rename = "READ_PAIR_OPTICAL_DUPLICATES")]
+    read_pair_optical_duplicates: u64,
+    #[serde(rename = "PERCENT_DUPLICATION")]
+    percent_duplication: f64,
+    #[serde(rename = "ESTIMATED_LIBRARY_SIZE")]
+    estimated_library_size: u64,
+}
+
+impl From<&DuplicateStats> for DuplicateStatsJson {
+    fn from(stats: &DuplicateStats) -> Self {
+        DuplicateStatsJson {
+            unpaired_reads_examined: stats.unpaired_reads_examined,
+            read_pairs_examined: stats.read_pairs_examined(),
+            secondary_or_supplementary_rds: stats.secondary_or_supplementary_rds,
+            unmapped_reads: stats.unmapped_reads,
+            unpaired_read_duplicates: stats.unpaired_read_duplicates,
+            read_pair_duplicates: stats.read_pair_duplicates(),
+            read_pair_optical_duplicates: stats.read_pair_optical_duplicates(),
+            percent_duplication: stats.percent_duplication(),
+            estimated_library_size: stats.estimated_library_size().unwrap_or(0),
+        }
+    }
+}
+
 impl Statistic for DuplicateStats {
 
     fn add_record(&mut self, rhs: &Record) {
@@ -244,7 +264,8 @@ impl Statistic for DuplicateStats {
     }
 
     fn as_json(&self) -> serde_json::Value {
-        self.to_json_with_extra()
+        serde_json::to_value(DuplicateStatsJson::from(self))
+            .expect("Failed to serialize DuplicateStats to JSON")
     }
 
     fn kind(&self) -> StatisticKind {
@@ -278,20 +299,6 @@ impl AddAssign<&Self> for DuplicateStats {
         self.unpaired_read_duplicates += rhs.unpaired_read_duplicates;
         self.pvt_read_pair_duplicates += rhs.pvt_read_pair_duplicates;
         self.pvt_read_pair_optical_duplicates += rhs.pvt_read_pair_optical_duplicates;
-    }
-}
-
-impl Serialize for DuplicateStats {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        trace!("Serializing a DuplicateStats struct");
-
-        let mut state = serializer.serialize_struct("DuplicateStats", 1)?;
-        // Here we substitute the standard serialization for its enriched JSON representation
-        state.serialize_field("duplicate_stats", &self.to_json_with_extra())?;
-        state.end()
     }
 }
 
