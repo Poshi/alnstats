@@ -185,7 +185,22 @@ impl DuplicateStats {
 }
 
 impl Statistic for DuplicateStats {
+
     fn add_record(&mut self, rhs: &Record) {
+        fn is_optical_duplicate(record: &Record, duplicate_type_tags: &HashSet<String>) -> bool {
+            record
+                .data()
+                .iter()
+                .filter_map(Result::ok)
+                .any(|(tag, value)| {
+                    // Convert tag (2 bytes) to String for comparison
+                    let tag_str = std::str::from_utf8(tag.as_ref()).unwrap_or("");
+
+                    duplicate_type_tags.contains(tag_str)
+                        && matches!(value, Value::String(s) if s == SEQ_DUP_VALUE)
+                })
+        }
+
         let flags = rhs.flags();
 
         if flags.is_unmapped() {
@@ -205,19 +220,9 @@ impl Statistic for DuplicateStats {
                 self.unpaired_read_duplicates += 1;
             } else {
                 self.pvt_read_pair_duplicates += 1;
-
-                let sq_dup = rhs
-                    .data()
-                    .iter()
-                    .filter_map(Result::ok)
-                    .any(|(tag, value)| {
-                        // Convert tag (2 bytes) to String for comparison
-                        let tag_str = std::str::from_utf8(tag.as_ref()).unwrap_or("");
-
-                        self.duplicate_type_tags.contains(tag_str)
-                            && matches!(value, Value::String(s) if s == SEQ_DUP_VALUE)
-                    });
-                self.pvt_read_pair_optical_duplicates += u64::from(sq_dup);
+                if is_optical_duplicate(rhs, &self.duplicate_type_tags) {
+                    self.pvt_read_pair_optical_duplicates += 1
+                }
             }
         }
     }
