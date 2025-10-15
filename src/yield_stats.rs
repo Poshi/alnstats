@@ -25,12 +25,7 @@ impl Statistic for SEYieldStats {
     }
 
     fn as_json(&self) -> serde_json::Value {
-        serde_json::json!({
-            "n_reads": self.n_reads,
-            "max_length": self.max_length,
-            "clipped_yield": self.clipped_yield,
-            "total_yield": self.total_yield,
-        })
+        serde_json::to_value(self).expect("Failed to serialize SEYieldStats to JSON")
     }
 
     fn kind(&self) -> StatisticKind {
@@ -87,10 +82,7 @@ impl Statistic for PEYieldStats {
     }
 
     fn as_json(&self) -> serde_json::Value {
-        serde_json::json!({
-            "first_end": self.first_end.as_json(),
-            "second_end": self.second_end.as_json(),
-        })
+        serde_json::to_value(self).expect("Failed to serialize PEYieldStats to JSON")
     }
 
     fn kind(&self) -> StatisticKind {
