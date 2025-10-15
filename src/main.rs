@@ -261,7 +261,7 @@ fn write_results(stats_per_aggregate_key: &StatsPerKey, args: &Args) -> Result<(
     Ok(())
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
     // Parse CLI arguments
     let args = Args::parse();
 
@@ -273,17 +273,9 @@ fn main() {
     debug!("Arguments: {args:?}");
 
     // Process the BAM file, filling in the stats objects
-    match process_bam(&args.input, &args) {
-        Ok((header, stats_per_rg)) => {
-            let aggregated_stats = aggregate_stats(&stats_per_rg, &header, &args);
-            if let Err(e) = write_results(&aggregated_stats, &args) {
-                error!("Error writing results: {e}");
-                std::process::exit(1);
-            }
-        }
-        Err(e) => {
-            error!("Error processing BAM file: {e}");
-            std::process::exit(1);
-        }
-    }
+    let (header, stats_per_rg) = process_bam(&args.input, &args)?;
+    let aggregated_stats = aggregate_stats(&stats_per_rg, &header, &args);
+    write_results(&aggregated_stats, &args)?;
+
+    Ok(())
 }
