@@ -2,9 +2,10 @@ use std::ops::AddAssign;
 use log::{trace, warn};
 use serde::Serialize;
 use noodles::bam::Record;
-use crate::add_record::AddRecord;
+use crate::statistic::Statistic;
+use crate::cigar_ext::CigarExt;
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Clone)]
 pub struct SEYieldStats {
     n_reads: u64,
     max_length: u64,
@@ -24,14 +25,13 @@ impl SEYieldStats {
     }
 }
 
-impl AddRecord for SEYieldStats {
+impl Statistic for SEYieldStats {
     fn add_record(&mut self, record: &Record) {
         let seq_length = record.sequence().len() as u64;
 
         self.n_reads += 1;
         self.max_length = self.max_length.max(seq_length);
-        //self.clipped_yield += rhs.cigar().clipped_length() as u64;
-        self.clipped_yield += seq_length;
+        self.clipped_yield += record.cigar().query_alignment_length() as u64;
         self.total_yield += seq_length;
     }
 
@@ -45,6 +45,16 @@ impl AddRecord for SEYieldStats {
     }
 
     fn kind(&self) -> &'static str { "yield_se" }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn add_assign_to_statistic(&mut self, other: &dyn Statistic) {
+        if let Some(other_concrete) = other.as_any().downcast_ref::<SEYieldStats>() {
+            *self += other_concrete;
+        }
+    }
 }
 
 impl AddAssign<&Record> for SEYieldStats {
@@ -53,7 +63,16 @@ impl AddAssign<&Record> for SEYieldStats {
     }
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+impl AddAssign<&Self> for SEYieldStats {
+    fn add_assign(&mut self, rhs: &Self) {
+        self.n_reads += rhs.n_reads;
+        self.max_length = self.max_length.max(rhs.max_length);
+        self.clipped_yield += rhs.clipped_yield;
+        self.total_yield += rhs.total_yield;
+    }
+}
+
+#[derive(Debug, Serialize, PartialEq, Clone)]
 pub struct PEYieldStats {
     first_end: SEYieldStats,
     second_end: SEYieldStats,
@@ -69,7 +88,7 @@ impl PEYieldStats {
     }
 }
 
-impl AddRecord for PEYieldStats {
+impl Statistic for PEYieldStats {
     fn add_record(&mut self, record: &Record) {
         let flags = record.flags();
 
@@ -94,11 +113,28 @@ impl AddRecord for PEYieldStats {
     }
 
     fn kind(&self) -> &'static str { "yield_pe" }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn add_assign_to_statistic(&mut self, other: &dyn Statistic) {
+        if let Some(other_concrete) = other.as_any().downcast_ref::<PEYieldStats>() {
+            *self += other_concrete;
+        }
+    }
 }
 
 impl AddAssign<&Record> for PEYieldStats {
     fn add_assign(&mut self, rhs: &Record) {
         self.add_record(rhs);
+    }
+}
+
+impl AddAssign<&Self> for PEYieldStats {
+    fn add_assign(&mut self, rhs: &Self) {
+        self.first_end += &rhs.first_end;
+        self.second_end += &rhs.second_end;
     }
 }
 
@@ -136,4 +172,73 @@ mod tests {
         });
     }
 
+    #[test]
+    fn test_seyieldstats_add_assign() {
+        let mut stats1 = SEYieldStats {
+            n_reads: 10,
+            max_length: 100,
+            clipped_yield: 5,
+            total_yield: 1000,
+        };
+        let stats2 = SEYieldStats {
+            n_reads: 20,
+            max_length: 150,
+            clipped_yield: 10,
+            total_yield: 2000,
+        };
+        stats1 += &stats2;
+        assert_eq!(stats1, SEYieldStats {
+            n_reads: 30,
+            max_length: 150,
+            clipped_yield: 15,
+            total_yield: 3000,
+        });
+    }
+
+    #[test]
+    fn test_peyieldstats_add_assign() {
+        let mut stats1 = PEYieldStats {
+            first_end: SEYieldStats {
+                n_reads: 10,
+                max_length: 100,
+                clipped_yield: 5,
+                total_yield: 1000,
+            },
+            second_end: SEYieldStats {
+                n_reads: 10,
+                max_length: 100,
+                clipped_yield: 5,
+                total_yield: 1000,
+            },
+        };
+        let stats2 = PEYieldStats {
+            first_end: SEYieldStats {
+                n_reads: 20,
+                max_length: 150,
+                clipped_yield: 10,
+                total_yield: 2000,
+            },
+            second_end: SEYieldStats {
+                n_reads: 20,
+                max_length: 150,
+                clipped_yield: 10,
+                total_yield: 2000,
+            },
+        };
+        stats1 += &stats2;
+        assert_eq!(stats1, PEYieldStats {
+            first_end: SEYieldStats {
+                n_reads: 30,
+                max_length: 150,
+                clipped_yield: 15,
+                total_yield: 3000,
+            },
+            second_end: SEYieldStats {
+                n_reads: 30,
+                max_length: 150,
+                clipped_yield: 15,
+                total_yield: 3000,
+            },
+        });
+    }
 }

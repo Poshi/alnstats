@@ -5,19 +5,19 @@ use serde::ser::{SerializeStruct, Serializer};
 use serde::Serialize;
 use noodles::bam::Record;
 use noodles::sam::alignment::record::data::field::value::Value;
-use crate::add_record::AddRecord;
+use crate::statistic::Statistic;
 use crate::runtime_error::RuntimeError;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DuplicateStats {
     duplicate_type_tags: HashSet<String>,
     unpaired_reads_examined: u64,
-    read_pairs_examined: u64,
+    _read_pairs_examined: u64,
     secondary_or_supplementary_rds: u64,
     unmapped_reads: u64,
     unpaired_read_duplicates: u64,
-    read_pair_duplicates: u64,
-    read_pair_optical_duplicates: u64,
+    _read_pair_duplicates: u64,
+    _read_pair_optical_duplicates: u64,
 }
 
 impl DuplicateStats {
@@ -33,22 +33,38 @@ impl DuplicateStats {
         DuplicateStats {
             duplicate_type_tags: dt_tags,
             unpaired_reads_examined: 0,
-            read_pairs_examined: 0,
+            _read_pairs_examined: 0,
             secondary_or_supplementary_rds: 0,
             unmapped_reads: 0,
             unpaired_read_duplicates: 0,
-            read_pair_duplicates: 0,
-            read_pair_optical_duplicates: 0,
+            _read_pair_duplicates: 0,
+            _read_pair_optical_duplicates: 0,
         }
     }
 
+    pub fn read_pairs_examined(&self) -> u64 {
+        self._read_pairs_examined / 2
+    }
+
+    pub fn read_pair_duplicates(&self) -> u64 {
+        self._read_pair_duplicates / 2
+    }
+
+    pub fn read_pair_optical_duplicates(&self) -> u64 {
+        self._read_pair_optical_duplicates / 2
+    }
+
     pub fn  percent_duplication(&self) -> f64 {
-        if self.read_pairs_examined == 0 || self.unpaired_reads_examined == 0 {
+        if (self.read_pairs_examined() + self.unpaired_reads_examined) == 0 {
             return 0.0;
         }
 
-        ((self.read_pair_duplicates * 2) + self.unpaired_read_duplicates) as f64
-            / ((self.read_pairs_examined * 2) + self.unpaired_reads_examined) as f64
+        // Originally, read_pair_duplicates and read_pairs_examined were
+        // multiplied by 2 in the original Picard code.
+        // But that was taking into account that they were previously
+        // divided by 2 to get read pairs from single ends.
+        (self.read_pair_duplicates() * 2 + self.unpaired_read_duplicates) as f64
+            / (self.read_pairs_examined() * 2 + self.unpaired_reads_examined) as f64
     }
 
     /*
@@ -92,8 +108,8 @@ impl DuplicateStats {
             (x + y) / 2.0
         }
 
-        let read_pairs = self.read_pairs_examined - self.read_pair_optical_duplicates;
-        let unique_read_pairs = self.read_pairs_examined - self.read_pair_duplicates;
+        let read_pairs = self.read_pairs_examined() - self.read_pair_optical_duplicates();
+        let unique_read_pairs = self.read_pairs_examined() - self.read_pair_duplicates();
         let read_pair_duplicates = read_pairs - unique_read_pairs;
 
         if read_pairs <= 0 || read_pair_duplicates <= 0 {
@@ -135,12 +151,12 @@ impl DuplicateStats {
         serde_json::json!(
             {
                 "UNPAIRED_READS_EXAMINED": self.unpaired_reads_examined,
-                "READ_PAIRS_EXAMINED": self.read_pairs_examined,
+                "READ_PAIRS_EXAMINED": self.read_pairs_examined(),
                 "SECONDARY_OR_SUPPLEMENTARY_RDS": self.secondary_or_supplementary_rds,
                 "UNMAPPED_READS": self.unmapped_reads,
                 "UNPAIRED_READ_DUPLICATES": self.unpaired_read_duplicates,
-                "READ_PAIR_DUPLICATES": self.read_pair_duplicates,
-                "READ_PAIR_OPTICAL_DUPLICATES": self.read_pair_optical_duplicates,
+                "READ_PAIR_DUPLICATES": self.read_pair_duplicates(),
+                "READ_PAIR_OPTICAL_DUPLICATES": self.read_pair_optical_duplicates(),
                 "PERCENT_DUPLICATION": self.percent_duplication(),
                 "ESTIMATED_LIBRARY_SIZE": self.estimated_library_size().unwrap_or(0),
             }
@@ -148,39 +164,39 @@ impl DuplicateStats {
     }
 }
 
-impl AddRecord for DuplicateStats {
+impl Statistic for DuplicateStats {
     fn add_record(&mut self, rhs: &Record) {
         let flags = rhs.flags();
 
-        if flags.is_supplementary() || flags.is_secondary() {
-            self.secondary_or_supplementary_rds += 1;
-        }
-
         if flags.is_unmapped() {
             self.unmapped_reads += 1;
-        }
-
-        if flags.is_mate_unmapped() {
+        } else if flags.is_supplementary() || flags.is_secondary() {
+            self.secondary_or_supplementary_rds += 1;
+        } else if !flags.is_segmented() || flags.is_mate_unmapped() {
             self.unpaired_reads_examined += 1;
-            self.unpaired_read_duplicates += flags.is_duplicate() as u64;
+        } else {
+            self._read_pairs_examined += 1;
         }
 
-        if flags.is_first_segment() {
-            self.read_pairs_examined += 1;
-            if flags.is_duplicate() {
-                let sq_dup = rhs
-                    .data()
-                    .iter()
-                    .filter_map(Result::ok)
-                    .any(|(tag, value)| {
-                        // Convertir tag (2 bytes) a String para comparación
-                        let tag_str = std::str::from_utf8(tag.as_ref()).unwrap_or("");
+        if flags.is_duplicate() {
+            if !(flags.is_supplementary() || flags.is_secondary()) && !flags.is_unmapped() {
+                if !flags.is_segmented() || flags.is_mate_unmapped() {
+                    self.unpaired_read_duplicates += 1
+                } else {
+                    self._read_pair_duplicates += 1;
 
-                        self.duplicate_type_tags.contains(tag_str) && matches!(value, Value::String(s) if s == "SQ")
-                    });
+                    let sq_dup = rhs
+                        .data()
+                        .iter()
+                        .filter_map(Result::ok)
+                        .any(|(tag, value)| {
+                            // Convert tag (2 bytes) to String for comparison
+                            let tag_str = std::str::from_utf8(tag.as_ref()).unwrap_or("");
 
-                self.read_pair_duplicates += 1;
-                self.read_pair_optical_duplicates += sq_dup as u64;
+                            self.duplicate_type_tags.contains(tag_str) && matches!(value, Value::String(s) if s == "SQ")
+                        });
+                    self._read_pair_optical_duplicates += sq_dup as u64;
+                }
             }
         }
     }
@@ -190,11 +206,34 @@ impl AddRecord for DuplicateStats {
     }
 
     fn kind(&self) -> &'static str { "duplicate" }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn add_assign_to_statistic(&mut self, other: &dyn Statistic) {
+        if let Some(other_concrete) = other.as_any().downcast_ref::<DuplicateStats>() {
+            *self += other_concrete;
+        }
+    }
 }
 
 impl AddAssign<&Record> for DuplicateStats {
     fn add_assign(&mut self, rhs: &Record) {
         self.add_record(rhs);
+    }
+}
+
+impl AddAssign<&Self> for DuplicateStats {
+    fn add_assign(&mut self, rhs: &Self) {
+        assert_eq!(self.duplicate_type_tags, rhs.duplicate_type_tags);
+        self.unpaired_reads_examined += rhs.unpaired_reads_examined;
+        self._read_pairs_examined += rhs._read_pairs_examined;
+        self.secondary_or_supplementary_rds += rhs.secondary_or_supplementary_rds;
+        self.unmapped_reads += rhs.unmapped_reads;
+        self.unpaired_read_duplicates += rhs.unpaired_read_duplicates;
+        self._read_pair_duplicates += rhs._read_pair_duplicates;
+        self._read_pair_optical_duplicates += rhs._read_pair_optical_duplicates;
     }
 }
 
@@ -207,5 +246,46 @@ impl Serialize for DuplicateStats {
         // Here we substitute the standard serialization for its enriched JSON representation
         state.serialize_field("duplicate_stats", &self.to_json_with_extra())?;
         state.end()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_duplicatestats_add_assign() {
+        let mut stats1 = DuplicateStats {
+            duplicate_type_tags: HashSet::from_iter(vec!["dt".to_string()]),
+            unpaired_reads_examined: 10,
+            _read_pairs_examined: 100,
+            secondary_or_supplementary_rds: 5,
+            unmapped_reads: 2,
+            unpaired_read_duplicates: 1,
+            _read_pair_duplicates: 10,
+            _read_pair_optical_duplicates: 3,
+        };
+        let stats2 = DuplicateStats {
+            duplicate_type_tags: HashSet::from_iter(vec!["xt".to_string()]),
+            unpaired_reads_examined: 20,
+            _read_pairs_examined: 200,
+            secondary_or_supplementary_rds: 10,
+            unmapped_reads: 4,
+            unpaired_read_duplicates: 2,
+            _read_pair_duplicates: 20,
+            _read_pair_optical_duplicates: 6,
+        };
+        stats1 += &stats2;
+
+        let expected_tags = HashSet::from_iter(vec!["dt".to_string(), "xt".to_string()]);
+
+        assert_eq!(stats1.duplicate_type_tags, expected_tags);
+        assert_eq!(stats1.unpaired_reads_examined, 30);
+        assert_eq!(stats1._read_pairs_examined, 300);
+        assert_eq!(stats1.secondary_or_supplementary_rds, 15);
+        assert_eq!(stats1.unmapped_reads, 6);
+        assert_eq!(stats1.unpaired_read_duplicates, 3);
+        assert_eq!(stats1._read_pair_duplicates, 30);
+        assert_eq!(stats1._read_pair_optical_duplicates, 9);
     }
 }
