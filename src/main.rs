@@ -114,7 +114,7 @@ fn get_rg_tag(record: &Record) -> Option<String> {
     record
         .data()
         .get(&Tag::READ_GROUP)
-        .and_then(std::result::Result::ok)
+        .and_then(Result::ok)
         .and_then(|value| match value {
             Value::String(s) => Some(s.to_string()),
             _ => None, // RG should always be a String, but just in case
