@@ -3,6 +3,7 @@ mod yield_stats;
 mod duplicate_stats;
 mod runtime_error;
 mod cigar_ext;
+mod constants;
 
 use std::collections::HashMap;
 use std::error::Error;
@@ -18,6 +19,7 @@ use noodles::sam::alignment::record::data::field::{Tag, Value};
 use crate::yield_stats::PEYieldStats;
 use crate::duplicate_stats::DuplicateStats;
 use crate::statistic::Statistic;
+use crate::constants::{DEFAULT_DUP_TAG, KIND_YIELD_SE, KIND_YIELD_PE, KIND_DUPLICATE, RG_ID_TAG, RG_SAMPLE_TAG, RG_LIBRARY_TAG, UNKNOWN};
 
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -53,7 +55,7 @@ struct Args {
     yield_out: Option<String>,
 
     /// The tag names used for marking the duplicate type
-    #[arg(short, long, default_values=&["dt"])]
+    #[arg(short, long, default_values=&[DEFAULT_DUP_TAG])]
     duplicate_type_tag: Vec<String>,
 
     /// Level at which we want the data to be aggregated
@@ -91,7 +93,7 @@ fn get_read_groups(header: &Header) -> HashMap<String, HashMap<String, String>> 
         .map(|(k, map)| {
             let read_group_id = k.to_string().to_owned();
 
-            let entry: HashMap<String, String> = std::iter::once(("ID".to_string(), read_group_id.clone()))
+            let entry: HashMap<String, String> = std::iter::once((RG_ID_TAG.to_string(), read_group_id.clone()))
                 .chain(
                     map
                         .other_fields()
@@ -136,7 +138,7 @@ fn process_bam(bam_filename: &String, args: &Args) -> Result<(Header, HashMap<St
 
         match rec {
             Ok(record) => {
-                let rg_id = get_rg_tag(&record).unwrap_or_else(|| "unknown".to_string());
+                let rg_id = get_rg_tag(&record).unwrap_or_else(|| UNKNOWN.to_string());
 
                 let stats = stats_per_rg
                     .entry(rg_id)
@@ -165,12 +167,12 @@ fn aggregate_stats(stats_per_rg: &HashMap<String, Vec<Box<dyn Statistic>>>, head
 
         let aggregation_key = match args.aggregation {
             Aggregation::Sample => rg_map
-                .and_then(|rg| rg.get("SM"))
+                .and_then(|rg| rg.get(RG_SAMPLE_TAG))
                 .cloned()
-                .unwrap_or_else(|| "unknown".to_string()),
+                .unwrap_or_else(|| UNKNOWN.to_string()),
             Aggregation::Library => {
-                let sample = rg_map.and_then(|rg| rg.get("SM")).cloned().unwrap_or_else(|| "unknown".to_string());
-                let library = rg_map.and_then(|rg| rg.get("LB")).cloned().unwrap_or_else(|| "unknown".to_string());
+                let sample = rg_map.and_then(|rg| rg.get(RG_SAMPLE_TAG)).cloned().unwrap_or_else(|| UNKNOWN.to_string());
+                let library = rg_map.and_then(|rg| rg.get(RG_LIBRARY_TAG)).cloned().unwrap_or_else(|| UNKNOWN.to_string());
                 format!("{}	{}", sample, library)
             }
         };
@@ -201,10 +203,10 @@ fn write_results(stats_per_rg: &HashMap<String, Vec<Box<dyn Statistic>>>, args: 
             match args.aggregation {
                 Aggregation::Sample => {
                      match stat.kind() {
-                        "yield_pe" | "yield_se" => {
+                        KIND_YIELD_PE | KIND_YIELD_SE => {
                             yield_results.insert(key.clone(), json_val);
                         }
-                        "duplicate" => {
+                        KIND_DUPLICATE => {
                             duplicate_results.insert(key.clone(), json_val);
                         }
                         _ => {}
@@ -217,8 +219,8 @@ fn write_results(stats_per_rg: &HashMap<String, Vec<Box<dyn Statistic>>>, args: 
                         let library_name = parts[1].to_string();
 
                         let target_map = match stat.kind() {
-                            "yield_pe" | "yield_se" => &mut yield_results,
-                            "duplicate" => &mut duplicate_results,
+                            KIND_YIELD_PE | KIND_YIELD_SE => &mut yield_results,
+                            KIND_DUPLICATE => &mut duplicate_results,
                             _ => continue,
                         };
 

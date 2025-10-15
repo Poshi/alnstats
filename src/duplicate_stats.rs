@@ -1,12 +1,13 @@
-use std::collections::HashSet;
-use std::ops::AddAssign;
+use crate::constants::{DEFAULT_DUP_TAG, KIND_DUPLICATE, SEQ_DUP_VALUE};
+use crate::runtime_error::RuntimeError;
+use crate::statistic::Statistic;
 use log::trace;
-use serde::ser::{SerializeStruct, Serializer};
-use serde::Serialize;
 use noodles::bam::Record;
 use noodles::sam::alignment::record::data::field::value::Value;
-use crate::statistic::Statistic;
-use crate::runtime_error::RuntimeError;
+use serde::ser::{SerializeStruct, Serializer};
+use serde::Serialize;
+use std::collections::HashSet;
+use std::ops::AddAssign;
 
 #[derive(Debug, Clone)]
 pub struct DuplicateStats {
@@ -25,7 +26,7 @@ impl DuplicateStats {
         trace!("Creating DuplicateStats struct");
 
         let dt_tags: HashSet<String> = if duplicate_type_tag.is_empty() {
-            HashSet::from_iter(vec![String::from("dt")])
+            HashSet::from_iter(vec![DEFAULT_DUP_TAG.to_string()])
         } else {
             HashSet::from_iter(duplicate_type_tag.iter().cloned())
         };
@@ -193,7 +194,7 @@ impl Statistic for DuplicateStats {
                             // Convert tag (2 bytes) to String for comparison
                             let tag_str = std::str::from_utf8(tag.as_ref()).unwrap_or("");
 
-                            self.duplicate_type_tags.contains(tag_str) && matches!(value, Value::String(s) if s == "SQ")
+                        self.duplicate_type_tags.contains(tag_str) && matches!(value, Value::String(s) if s == SEQ_DUP_VALUE)
                         });
                     self._read_pair_optical_duplicates += sq_dup as u64;
                 }
@@ -205,7 +206,7 @@ impl Statistic for DuplicateStats {
         self.to_json_with_extra()
     }
 
-    fn kind(&self) -> &'static str { "duplicate" }
+    fn kind(&self) -> &'static str { KIND_DUPLICATE }
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
@@ -256,7 +257,7 @@ mod tests {
     #[test]
     fn test_duplicatestats_add_assign() {
         let mut stats1 = DuplicateStats {
-            duplicate_type_tags: HashSet::from_iter(vec!["dt".to_string()]),
+            duplicate_type_tags: HashSet::from_iter(vec![DEFAULT_DUP_TAG.to_string()]),
             unpaired_reads_examined: 10,
             _read_pairs_examined: 100,
             secondary_or_supplementary_rds: 5,
@@ -266,7 +267,7 @@ mod tests {
             _read_pair_optical_duplicates: 3,
         };
         let stats2 = DuplicateStats {
-            duplicate_type_tags: HashSet::from_iter(vec!["dt".to_string()]),
+            duplicate_type_tags: HashSet::from_iter(vec![DEFAULT_DUP_TAG.to_string()]),
             unpaired_reads_examined: 20,
             _read_pairs_examined: 200,
             secondary_or_supplementary_rds: 10,
@@ -277,7 +278,7 @@ mod tests {
         };
         stats1 += &stats2;
 
-        let expected_tags = HashSet::from_iter(vec!["dt".to_string()]);
+        let expected_tags = HashSet::from_iter(vec![DEFAULT_DUP_TAG.to_string()]);
 
         assert_eq!(stats1.duplicate_type_tags, expected_tags);
         assert_eq!(stats1.unpaired_reads_examined, 30);

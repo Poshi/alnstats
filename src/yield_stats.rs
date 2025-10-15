@@ -1,9 +1,10 @@
-use std::ops::AddAssign;
-use log::{trace, warn};
-use serde::Serialize;
-use noodles::bam::Record;
-use crate::statistic::Statistic;
 use crate::cigar_ext::CigarExt;
+use crate::constants::{KIND_YIELD_PE, KIND_YIELD_SE};
+use crate::statistic::Statistic;
+use log::{trace, warn};
+use noodles::bam::Record;
+use serde::Serialize;
+use std::ops::AddAssign;
 
 #[derive(Debug, Serialize, PartialEq, Clone)]
 pub struct SEYieldStats {
@@ -44,7 +45,7 @@ impl Statistic for SEYieldStats {
         })
     }
 
-    fn kind(&self) -> &'static str { "yield_se" }
+    fn kind(&self) -> &'static str { KIND_YIELD_SE }
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
@@ -112,7 +113,7 @@ impl Statistic for PEYieldStats {
         })
     }
 
-    fn kind(&self) -> &'static str { "yield_pe" }
+    fn kind(&self) -> &'static str { KIND_YIELD_PE }
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
