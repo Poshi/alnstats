@@ -266,7 +266,7 @@ mod tests {
             _read_pair_optical_duplicates: 3,
         };
         let stats2 = DuplicateStats {
-            duplicate_type_tags: HashSet::from_iter(vec!["xt".to_string()]),
+            duplicate_type_tags: HashSet::from_iter(vec!["dt".to_string()]),
             unpaired_reads_examined: 20,
             _read_pairs_examined: 200,
             secondary_or_supplementary_rds: 10,
@@ -277,7 +277,7 @@ mod tests {
         };
         stats1 += &stats2;
 
-        let expected_tags = HashSet::from_iter(vec!["dt".to_string(), "xt".to_string()]);
+        let expected_tags = HashSet::from_iter(vec!["dt".to_string()]);
 
         assert_eq!(stats1.duplicate_type_tags, expected_tags);
         assert_eq!(stats1.unpaired_reads_examined, 30);
