@@ -18,10 +18,7 @@ use std::fmt;
 use std::fs::File;
 use std::io::BufWriter;
 
-use crate::constants::{
-    DEFAULT_DUP_TAG, KIND_DUPLICATE, KIND_YIELD_PE, KIND_YIELD_SE, RG_ID_TAG, RG_LIBRARY_TAG,
-    RG_SAMPLE_TAG, UNKNOWN,
-};
+use crate::constants::{DEFAULT_DUP_TAG, ReadGroupTag, StatisticKind, UNKNOWN};
 use crate::duplicate_stats::DuplicateStats;
 use crate::statistic::Statistic;
 use crate::yield_stats::PEYieldStats;
@@ -103,7 +100,7 @@ fn get_read_groups(header: &Header) -> HashMap<String, HashMap<String, String>> 
             let read_group_id = k.to_string().clone();
 
             let entry: HashMap<String, String> =
-                std::iter::once((RG_ID_TAG.to_string(), read_group_id.clone()))
+                std::iter::once((ReadGroupTag::Id.as_ref().to_string(), read_group_id.clone()))
                     .chain(
                         map.other_fields()
                             .iter()
@@ -186,17 +183,17 @@ fn aggregate_stats(
         let aggregation_key = match args.aggregation {
             Aggregation::Sample => AggregationKey::Sample(
                 rg_map
-                    .and_then(|rg| rg.get(RG_SAMPLE_TAG))
+                    .and_then(|rg| rg.get(ReadGroupTag::Sample.as_ref()))
                     .cloned()
                     .unwrap_or_else(|| UNKNOWN.to_string()),
             ),
             Aggregation::Library => {
                 let sample = rg_map
-                    .and_then(|rg| rg.get(RG_SAMPLE_TAG))
+                    .and_then(|rg| rg.get(ReadGroupTag::Sample.as_ref()))
                     .cloned()
                     .unwrap_or_else(|| UNKNOWN.to_string());
                 let library = rg_map
-                    .and_then(|rg| rg.get(RG_LIBRARY_TAG))
+                    .and_then(|rg| rg.get(ReadGroupTag::Library.as_ref()))
                     .cloned()
                     .unwrap_or_else(|| UNKNOWN.to_string());
                 AggregationKey::Library(sample, library)
@@ -229,19 +226,17 @@ fn write_results(
             let json_val = stat.as_json();
             match key {
                 AggregationKey::Sample(sample_name) => match stat.kind() {
-                    KIND_YIELD_PE | KIND_YIELD_SE => {
+                    StatisticKind::YieldPE | StatisticKind::YieldSE => {
                         yield_results.insert(sample_name.clone(), json_val);
                     }
-                    KIND_DUPLICATE => {
+                    StatisticKind::Duplicate => {
                         duplicate_results.insert(sample_name.clone(), json_val);
                     }
-                    _ => {}
                 },
                 AggregationKey::Library(sample_name, library_name) => {
                     let target_map = match stat.kind() {
-                        KIND_YIELD_PE | KIND_YIELD_SE => &mut yield_results,
-                        KIND_DUPLICATE => &mut duplicate_results,
-                        _ => continue,
+                        StatisticKind::YieldPE | StatisticKind::YieldSE => &mut yield_results,
+                        StatisticKind::Duplicate => &mut duplicate_results,
                     };
 
                     let sample_entry = target_map

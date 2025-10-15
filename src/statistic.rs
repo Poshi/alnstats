@@ -1,3 +1,4 @@
+use crate::constants::StatisticKind;
 use noodles::bam::Record;
 use std::any::Any;
 
@@ -14,7 +15,7 @@ pub trait Statistic: Any {
 
     /// A short static key identifying the kind of stats. Used by the caller
     /// to decide where to write the output (for example, "yield" or "duplicate").
-    fn kind(&self) -> &'static str;
+    fn kind(&self) -> StatisticKind;
 
     /// Return self as `Any` for downcasting.
     fn as_any(&self) -> &dyn Any;

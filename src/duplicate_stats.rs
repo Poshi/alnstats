@@ -1,4 +1,4 @@
-use crate::constants::{DEFAULT_DUP_TAG, KIND_DUPLICATE, SEQ_DUP_VALUE};
+use crate::constants::{DEFAULT_DUP_TAG, StatisticKind, SEQ_DUP_VALUE};
 use crate::runtime_error::RuntimeError;
 use crate::statistic::Statistic;
 use log::trace;
@@ -247,8 +247,8 @@ impl Statistic for DuplicateStats {
         self.to_json_with_extra()
     }
 
-    fn kind(&self) -> &'static str {
-        KIND_DUPLICATE
+    fn kind(&self) -> StatisticKind {
+        StatisticKind::Duplicate
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

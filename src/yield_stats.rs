@@ -1,5 +1,5 @@
 use crate::cigar_ext::CigarExt;
-use crate::constants::{KIND_YIELD_PE, KIND_YIELD_SE};
+use crate::constants::StatisticKind;
 use crate::statistic::Statistic;
 use log::{trace, warn};
 use noodles::bam::Record;
@@ -45,8 +45,8 @@ impl Statistic for SEYieldStats {
         })
     }
 
-    fn kind(&self) -> &'static str {
-        KIND_YIELD_SE
+    fn kind(&self) -> StatisticKind {
+        StatisticKind::YieldSE
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -115,8 +115,8 @@ impl Statistic for PEYieldStats {
         })
     }
 
-    fn kind(&self) -> &'static str {
-        KIND_YIELD_PE
+    fn kind(&self) -> StatisticKind {
+        StatisticKind::YieldPE
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

@@ -4,12 +4,24 @@
 
 /// Default tag for duplicate type marking.
 pub const DEFAULT_DUP_TAG: &str = "dt";
-/// Tag for Sample ID in Read Group header.
-pub const RG_SAMPLE_TAG: &str = "SM";
-/// Tag for Library ID in Read Group header.
-pub const RG_LIBRARY_TAG: &str = "LB";
-/// Tag for Read Group ID in header.
-pub const RG_ID_TAG: &str = "ID";
+
+/// Enum for Read Group tags.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ReadGroupTag {
+    Id,
+    Sample,
+    Library,
+}
+
+impl AsRef<str> for ReadGroupTag {
+    fn as_ref(&self) -> &str {
+        match self {
+            ReadGroupTag::Id => "ID",
+            ReadGroupTag::Sample => "SM",
+            ReadGroupTag::Library => "LB",
+        }
+    }
+}
 
 // --- BAM Tag Values ---
 
@@ -18,12 +30,23 @@ pub const SEQ_DUP_VALUE: &str = "SQ";
 
 // --- Statistic Kinds ---
 
-/// Kind identifier for Paired-End Yield stats.
-pub const KIND_YIELD_PE: &str = "yield_pe";
-/// Kind identifier for Single-End Yield stats.
-pub const KIND_YIELD_SE: &str = "yield_se";
-/// Kind identifier for Duplicate stats.
-pub const KIND_DUPLICATE: &str = "duplicate";
+/// Enum for different kinds of statistics.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum StatisticKind {
+    YieldPE,
+    YieldSE,
+    Duplicate,
+}
+
+impl AsRef<str> for StatisticKind {
+    fn as_ref(&self) -> &str {
+        match self {
+            StatisticKind::YieldPE => "yield_pe",
+            StatisticKind::YieldSE => "yield_se",
+            StatisticKind::Duplicate => "duplicate",
+        }
+    }
+}
 
 // --- Default / Fallback Values ---
 
