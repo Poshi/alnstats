@@ -159,17 +159,21 @@ fn process_bam(bam_filename: &String, args: &Args) -> Result<(Header, HashMap<St
 fn aggregate_stats(stats_per_rg: &HashMap<String, Vec<Box<dyn Statistic>>>, header: &Header, args: &Args) -> HashMap<String, Vec<Box<dyn Statistic>>> {
     let mut aggregated_stats: HashMap<String, Vec<Box<dyn Statistic>>> = HashMap::new();
     let read_groups_info = get_read_groups(header);
-    let aggregation_tag = match args.aggregation {
-        Aggregation::Sample => "SM",
-        Aggregation::Library => "LB",
-    };
 
     for (rg_id, stats_vec) in stats_per_rg {
-        let aggregation_key = read_groups_info
-            .get(rg_id)
-            .and_then(|rg_map| rg_map.get(aggregation_tag))
-            .cloned()
-            .unwrap_or_else(|| "unknown".to_string());
+        let rg_map = read_groups_info.get(rg_id);
+
+        let aggregation_key = match args.aggregation {
+            Aggregation::Sample => rg_map
+                .and_then(|rg| rg.get("SM"))
+                .cloned()
+                .unwrap_or_else(|| "unknown".to_string()),
+            Aggregation::Library => {
+                let sample = rg_map.and_then(|rg| rg.get("SM")).cloned().unwrap_or_else(|| "unknown".to_string());
+                let library = rg_map.and_then(|rg| rg.get("LB")).cloned().unwrap_or_else(|| "unknown".to_string());
+                format!("{}	{}", sample, library)
+            }
+        };
 
         let target_stats_vec = aggregated_stats
             .entry(aggregation_key)
@@ -191,17 +195,42 @@ fn write_results(stats_per_rg: &HashMap<String, Vec<Box<dyn Statistic>>>, args: 
     let mut yield_results = serde_json::Map::new();
     let mut duplicate_results = serde_json::Map::new();
 
-    for (rg_id, stats_vec) in stats_per_rg {
+    for (key, stats_vec) in stats_per_rg {
         for stat in stats_vec {
             let json_val = stat.as_json();
-            match stat.kind() {
-                "yield_pe" | "yield_se" => {
-                    yield_results.insert(rg_id.clone(), json_val);
+            match args.aggregation {
+                Aggregation::Sample => {
+                     match stat.kind() {
+                        "yield_pe" | "yield_se" => {
+                            yield_results.insert(key.clone(), json_val);
+                        }
+                        "duplicate" => {
+                            duplicate_results.insert(key.clone(), json_val);
+                        }
+                        _ => {}
+                    }
+                },
+                Aggregation::Library => {
+                    let parts: Vec<&str> = key.splitn(2, '\t').collect();
+                    if parts.len() == 2 {
+                        let sample_name = parts[0].to_string();
+                        let library_name = parts[1].to_string();
+
+                        let target_map = match stat.kind() {
+                            "yield_pe" | "yield_se" => &mut yield_results,
+                            "duplicate" => &mut duplicate_results,
+                            _ => continue,
+                        };
+
+                        let sample_entry = target_map
+                            .entry(sample_name)
+                            .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+
+                        if let Some(sample_map) = sample_entry.as_object_mut() {
+                            sample_map.insert(library_name, json_val);
+                        }
+                    }
                 }
-                "duplicate" => {
-                    duplicate_results.insert(rg_id.clone(), json_val);
-                }
-                _ => {}
             }
         }
     }
