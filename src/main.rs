@@ -15,6 +15,7 @@ use noodles::sam::alignment::record::data::field::{Tag, Value};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
+use std::fs::File;
 use std::io::BufWriter;
 
 use crate::constants::{
@@ -120,9 +121,12 @@ fn get_rg_tag(record: &Record) -> Option<String> {
         })
 }
 
-type StatsPerRG = HashMap<String, Vec<Box<dyn Statistic>>>;
+type StatsPerKey = HashMap<String, Vec<Box<dyn Statistic>>>;
 
-fn process_bam(bam_filename: &String, args: &Args) -> Result<(Header, StatsPerRG), Box<dyn Error>> {
+fn process_bam(
+    bam_filename: &String,
+    args: &Args,
+) -> Result<(Header, StatsPerKey), Box<dyn Error>> {
     // Open input file
     trace!("Opening input file: {bam_filename}");
     let mut reader = Builder.build_from_path(bam_filename)?;
@@ -131,7 +135,7 @@ fn process_bam(bam_filename: &String, args: &Args) -> Result<(Header, StatsPerRG
     trace!("Reading BAM header...");
     let header = reader.read_header()?;
 
-    let mut stats_per_rg: StatsPerRG = HashMap::new();
+    let mut stats_per_rg: StatsPerKey = HashMap::new();
 
     // Traverse input file while filling in the stats
     trace!("Processing BAM records...");
@@ -161,8 +165,8 @@ fn process_bam(bam_filename: &String, args: &Args) -> Result<(Header, StatsPerRG
     Ok((header, stats_per_rg))
 }
 
-fn aggregate_stats(stats_per_rg: &StatsPerRG, header: &Header, args: &Args) -> StatsPerRG {
-    let mut aggregated_stats: StatsPerRG = HashMap::new();
+fn aggregate_stats(stats_per_rg: &StatsPerKey, header: &Header, args: &Args) -> StatsPerKey {
+    let mut aggregated_stats: StatsPerKey = HashMap::new();
     let read_groups_info = get_read_groups(header);
 
     for (rg_id, stats_vec) in stats_per_rg {
@@ -198,13 +202,13 @@ fn aggregate_stats(stats_per_rg: &StatsPerRG, header: &Header, args: &Args) -> S
     aggregated_stats
 }
 
-fn write_results(stats_per_rg: &StatsPerRG, args: &Args) -> Result<(), Box<dyn Error>> {
+fn write_results(stats_per_aggregate_key: &StatsPerKey, args: &Args) -> Result<(), Box<dyn Error>> {
     trace!("Generating JSON output...");
 
     let mut yield_results = serde_json::Map::new();
     let mut duplicate_results = serde_json::Map::new();
 
-    for (key, stats_vec) in stats_per_rg {
+    for (key, stats_vec) in stats_per_aggregate_key {
         for stat in stats_vec {
             let json_val = stat.as_json();
             match args.aggregation {
@@ -219,23 +223,21 @@ fn write_results(stats_per_rg: &StatsPerRG, args: &Args) -> Result<(), Box<dyn E
                 },
                 Aggregation::Library => {
                     let parts: Vec<&str> = key.splitn(2, ' ').collect();
-                    if parts.len() == 2 {
-                        let sample_name = parts[0].to_string();
-                        let library_name = parts[1].to_string();
+                    let sample_name = parts[0].to_string();
+                    let library_name = parts[1].to_string();
 
-                        let target_map = match stat.kind() {
-                            KIND_YIELD_PE | KIND_YIELD_SE => &mut yield_results,
-                            KIND_DUPLICATE => &mut duplicate_results,
-                            _ => continue,
-                        };
+                    let target_map = match stat.kind() {
+                        KIND_YIELD_PE | KIND_YIELD_SE => &mut yield_results,
+                        KIND_DUPLICATE => &mut duplicate_results,
+                        _ => continue,
+                    };
 
-                        let sample_entry = target_map
-                            .entry(sample_name)
-                            .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+                    let sample_entry = target_map
+                        .entry(sample_name)
+                        .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
 
-                        if let Some(sample_map) = sample_entry.as_object_mut() {
-                            sample_map.insert(library_name, json_val);
-                        }
+                    if let Some(sample_map) = sample_entry.as_object_mut() {
+                        sample_map.insert(library_name, json_val);
                     }
                 }
             }
@@ -244,14 +246,14 @@ fn write_results(stats_per_rg: &StatsPerRG, args: &Args) -> Result<(), Box<dyn E
 
     if let Some(filename) = &args.yield_out {
         trace!("Output will be written to: {filename}");
-        let file = std::fs::File::create(filename)?;
+        let file = File::create(filename)?;
         let writer = BufWriter::new(file);
         serde_json::to_writer_pretty(writer, &yield_results)?;
     }
 
     if let Some(filename) = &args.metrics {
         trace!("Output will be written to: {filename}");
-        let file = std::fs::File::create(filename)?;
+        let file = File::create(filename)?;
         let writer = BufWriter::new(file);
         serde_json::to_writer_pretty(writer, &duplicate_results)?;
     }
