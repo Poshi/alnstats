@@ -183,59 +183,60 @@ impl DuplicateStats {
             }
         )
     }
+
+    fn is_unmapped_read(flags: &Flags) -> bool {
+        flags.is_unmapped()
+    }
+
+    fn is_secondary_or_supplementary(flags: &Flags) -> bool {
+        flags.is_supplementary() || flags.is_secondary()
+    }
+
+    fn is_unpaired_read(flags: &Flags) -> bool {
+        !flags.is_segmented() || flags.is_mate_unmapped()
+    }
+
+    fn is_valid_duplicate_candidate(flags: &Flags) -> bool {
+        flags.is_duplicate() && !(flags.is_supplementary() || flags.is_secondary() || flags.is_unmapped())
+    }
+
+    fn is_optical_duplicate(record: &Record, duplicate_type_tags: &HashSet<String>) -> bool {
+        record
+            .data()
+            .iter()
+            .filter_map(Result::ok)
+            .any(|(tag, value)| {
+                // Convert tag (2 bytes) to String for comparison
+                let tag_str = std::str::from_utf8(tag.as_ref()).unwrap_or("");
+
+                duplicate_type_tags.contains(tag_str)
+                    && matches!(value, Value::String(s) if s == SEQ_DUP_VALUE)
+            })
+    }
+
 }
 
 impl Statistic for DuplicateStats {
 
     fn add_record(&mut self, rhs: &Record) {
-        fn is_unmapped_read(flags: &Flags) -> bool {
-            flags.is_unmapped()
-        }
-
-        fn is_secondary_or_supplementary(flags: &Flags) -> bool {
-            flags.is_supplementary() || flags.is_secondary()
-        }
-
-        fn is_unpaired_read(flags: &Flags) -> bool {
-            !flags.is_segmented() || flags.is_mate_unmapped()
-        }
-
-        fn is_valid_duplicate_candidate(flags: &Flags) -> bool {
-            flags.is_duplicate() && !(flags.is_supplementary() || flags.is_secondary() || flags.is_unmapped())
-        }
-
-        fn is_optical_duplicate(record: &Record, duplicate_type_tags: &HashSet<String>) -> bool {
-            record
-                .data()
-                .iter()
-                .filter_map(Result::ok)
-                .any(|(tag, value)| {
-                    // Convert tag (2 bytes) to String for comparison
-                    let tag_str = std::str::from_utf8(tag.as_ref()).unwrap_or("");
-
-                    duplicate_type_tags.contains(tag_str)
-                        && matches!(value, Value::String(s) if s == SEQ_DUP_VALUE)
-                })
-        }
-
         let flags = rhs.flags();
 
-        if is_unmapped_read(&flags) {
+        if DuplicateStats::is_unmapped_read(&flags) {
             self.unmapped_reads += 1;
-        } else if is_secondary_or_supplementary(&flags) {
+        } else if DuplicateStats::is_secondary_or_supplementary(&flags) {
             self.secondary_or_supplementary_rds += 1;
-        } else if is_unpaired_read(&flags) {
+        } else if DuplicateStats::is_unpaired_read(&flags) {
             self.unpaired_reads_examined += 1;
         } else {
             self.pvt_read_pairs_examined += 1;
         }
 
-        if is_valid_duplicate_candidate(&flags) {
-            if is_unpaired_read(&flags) {
+        if DuplicateStats::is_valid_duplicate_candidate(&flags) {
+            if DuplicateStats::is_unpaired_read(&flags) {
                 self.unpaired_read_duplicates += 1;
             } else {
                 self.pvt_read_pair_duplicates += 1;
-                if is_optical_duplicate(rhs, &self.duplicate_type_tags) {
+                if DuplicateStats::is_optical_duplicate(rhs, &self.duplicate_type_tags) {
                     self.pvt_read_pair_optical_duplicates += 1
                 }
             }
