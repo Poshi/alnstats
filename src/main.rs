@@ -140,6 +140,17 @@ fn aggregate_stats(
     aggregated_stats
 }
 
+fn write_output(
+    filename: &str,
+    data: &serde_json::Map<String, serde_json::Value>,
+) -> Result<(), AppError> {
+    trace!("Output will be written to: {filename}");
+    let file = File::create(filename)?;
+    let writer = BufWriter::new(file);
+    serde_json::to_writer_pretty(writer, data)?;
+    Ok(())
+}
+
 fn write_results(stats_per_aggregate_key: &StatsPerKey, args: &Args) -> Result<(), AppError> {
     trace!("Generating JSON output...");
 
@@ -177,17 +188,11 @@ fn write_results(stats_per_aggregate_key: &StatsPerKey, args: &Args) -> Result<(
     }
 
     if let Some(filename) = &args.yield_out {
-        trace!("Output will be written to: {filename}");
-        let file = File::create(filename)?;
-        let writer = BufWriter::new(file);
-        serde_json::to_writer_pretty(writer, &yield_results)?;
+        write_output(filename, &yield_results)?;
     }
 
     if let Some(filename) = &args.metrics {
-        trace!("Output will be written to: {filename}");
-        let file = File::create(filename)?;
-        let writer = BufWriter::new(file);
-        serde_json::to_writer_pretty(writer, &duplicate_results)?;
+        write_output(filename, &duplicate_results)?;
     }
 
     Ok(())
