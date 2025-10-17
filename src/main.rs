@@ -3,25 +3,23 @@ mod cigar_ext;
 mod cli;
 mod constants;
 mod duplicate_stats;
-mod runtime_error;
+mod error;
 mod statistic;
 mod yield_stats;
 
-use log::{debug, error, info, trace};
-use std::collections::HashMap;
-use std::error::Error;
-use std::fs::File;
-use std::io::BufWriter;
-
+use crate::bam_stats_collector::BamStatsCollector;
+use crate::cli::{Args, Aggregation};
+use crate::constants::{ReadGroupTag, StatisticKind, UNKNOWN};
+use crate::error::AppError;
 use clap::Parser;
+use log::{debug, error, info, trace};
 use noodles::bam::Record;
 use noodles::bam::io::reader::Builder;
 use noodles::sam::Header;
 use noodles::sam::alignment::record::data::field::{Tag, Value};
-
-use crate::bam_stats_collector::BamStatsCollector;
-use crate::cli::{Aggregation, Args};
-use crate::constants::{ReadGroupTag, StatisticKind, UNKNOWN};
+use std::collections::HashMap;
+use std::fs::File;
+use std::io::BufWriter;
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub enum AggregationKey {
@@ -64,7 +62,7 @@ fn get_rg_tag(record: &Record) -> Option<String> {
 type StatsPerRG = HashMap<String, BamStatsCollector>;
 type StatsPerKey = HashMap<AggregationKey, BamStatsCollector>;
 
-fn process_bam(bam_filename: &String, args: &Args) -> Result<(Header, StatsPerRG), Box<dyn Error>> {
+fn process_bam(bam_filename: &String, args: &Args) -> Result<(Header, StatsPerRG), AppError> {
     // Open input file
     trace!("Opening input file: {bam_filename}");
     let mut reader = Builder.build_from_path(bam_filename)?;
@@ -112,7 +110,7 @@ fn aggregate_stats(
     for (rg_id, stats_collector) in stats_per_rg {
         let rg_map = read_groups_info.get(rg_id);
 
-        let aggregation_key = match args.aggregation {
+        let aggregation_key = match &args.aggregation {
             Aggregation::Sample => AggregationKey::Sample(
                 rg_map
                     .and_then(|rg| rg.get(ReadGroupTag::Sample.as_ref()))
@@ -142,7 +140,7 @@ fn aggregate_stats(
     aggregated_stats
 }
 
-fn write_results(stats_per_aggregate_key: &StatsPerKey, args: &Args) -> Result<(), Box<dyn Error>> {
+fn write_results(stats_per_aggregate_key: &StatsPerKey, args: &Args) -> Result<(), AppError> {
     trace!("Generating JSON output...");
 
     let mut yield_results = serde_json::Map::new();
@@ -195,7 +193,7 @@ fn write_results(stats_per_aggregate_key: &StatsPerKey, args: &Args) -> Result<(
     Ok(())
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), AppError> {
     // Parse CLI arguments
     let args = Args::parse();
 

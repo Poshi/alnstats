@@ -1,13 +1,14 @@
+use log::trace;
 use std::collections::HashSet;
 use std::ops::AddAssign;
-use log::trace;
 
 use noodles::bam::Record;
 use noodles::sam::alignment::record::Flags;
-use noodles::sam::alignment::record::data::field::value::Value;use serde::Serialize;
+use noodles::sam::alignment::record::data::field::value::Value;
+use serde::Serialize;
 
 use crate::constants::{DEFAULT_DUP_TAG, SEQ_DUP_VALUE, StatisticKind};
-use crate::runtime_error::RuntimeError;
+use crate::error::AppError;
 use crate::statistic::Statistic;
 
 #[derive(Debug, Clone)]
@@ -85,7 +86,7 @@ impl DuplicateStats {
     }
     */
 
-    pub fn estimated_library_size(&self) -> Result<u64, RuntimeError> {
+    pub fn estimated_library_size(&self) -> Result<u64, AppError> {
         /// Estimate the size of the library.
         ///
         /// Estimates the size of a library based on the number of paired end molecules observed
@@ -115,7 +116,7 @@ impl DuplicateStats {
         let read_pair_duplicates = read_pairs - unique_read_pairs;
 
         if read_pairs == 0 || read_pair_duplicates == 0 {
-            return Err(RuntimeError(String::from(
+            return Err(AppError::Runtime(String::from(
                 "Read pairs or duplicate pairs are zero!",
             )));
         }
@@ -130,7 +131,7 @@ impl DuplicateStats {
                 read_pairs as f64,
             ) < 0.0
         {
-            return Err(RuntimeError(format!(
+            return Err(AppError::Runtime(format!(
                 "Invalid values for pairs and unique pairs: {read_pairs}, {unique_read_pairs}"
             )));
         }
