@@ -228,4 +228,74 @@ mod tests {
             }
         );
     }
+
+    #[test]
+    fn test_seyieldstats_as_json() {
+        let stats = SEYieldStats {
+            n_reads: 1,
+            max_length: 10,
+            clipped_yield: 5,
+            total_yield: 10,
+        };
+        let json = stats.as_json();
+        assert_eq!(json["n_reads"], 1);
+        assert_eq!(json["max_length"], 10);
+        assert_eq!(json["clipped_yield"], 5);
+        assert_eq!(json["total_yield"], 10);
+    }
+
+    #[test]
+    fn test_seyieldstats_kind() {
+        let stats = SEYieldStats::default();
+        assert_eq!(stats.kind(), StatisticKind::YieldSE);
+    }
+
+    #[test]
+    fn test_peyieldstats_as_json() {
+        let stats = PEYieldStats {
+            first_end: SEYieldStats {
+                n_reads: 1,
+                max_length: 10,
+                clipped_yield: 5,
+                total_yield: 10,
+            },
+            second_end: SEYieldStats {
+                n_reads: 2,
+                max_length: 20,
+                clipped_yield: 10,
+                total_yield: 20,
+            },
+        };
+        let json = stats.as_json();
+        assert_eq!(json["first_end"]["n_reads"], 1);
+        assert_eq!(json["second_end"]["n_reads"], 2);
+    }
+
+    #[test]
+    fn test_peyieldstats_kind() {
+        let stats = PEYieldStats::default();
+        assert_eq!(stats.kind(), StatisticKind::YieldPE);
+    }
+
+    #[test]
+    fn test_seyieldstats_add_assign_to_statistic() {
+        let mut stats1 = SEYieldStats::default();
+        stats1.n_reads = 1;
+        let stats2 = SEYieldStats { n_reads: 2, max_length: 10, clipped_yield: 20, total_yield: 30 };
+        stats1.add_assign_to_statistic(&stats2);
+        assert_eq!(stats1.n_reads, 3);
+    }
+
+    #[test]
+    fn test_peyieldstats_add_assign_to_statistic() {
+        let mut stats1 = PEYieldStats::default();
+        stats1.first_end.n_reads = 1;
+        let stats2 = PEYieldStats {
+            first_end: SEYieldStats { n_reads: 2, ..Default::default() },
+            second_end: SEYieldStats { n_reads: 3, ..Default::default() },
+        };
+        stats1.add_assign_to_statistic(&stats2);
+        assert_eq!(stats1.first_end.n_reads, 3);
+        assert_eq!(stats1.second_end.n_reads, 3);
+    }
 }
