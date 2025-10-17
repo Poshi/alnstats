@@ -26,7 +26,7 @@ impl BamStatsCollector {
         Self { stats }
     }
 
-    pub fn process_record(&mut self, record: &Record) {
+    pub fn add_record(&mut self, record: &Record) {
         for stat in self.stats.iter_mut() {
             stat.add_record(record);
         }

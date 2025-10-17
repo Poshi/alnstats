@@ -90,7 +90,7 @@ fn process_bam(bam_filename: &String, args: &Args) -> Result<(Header, StatsPerRG
                     .entry(rg_id)
                     .or_insert_with(|| BamStatsCollector::new(args));
 
-                collector.process_record(&record);
+                collector.add_record(&record);
             }
             Err(e) => {
                 error!("Error reading record {i}: {e}");
