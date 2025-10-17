@@ -1,5 +1,6 @@
-use serde::Serialize;
 use std::fmt;
+
+use serde::Serialize;
 
 #[derive(Debug, Serialize)]
 pub struct RuntimeError(pub String);

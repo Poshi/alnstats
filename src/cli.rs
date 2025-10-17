@@ -1,6 +1,8 @@
-use crate::constants::DEFAULT_DUP_TAG;
-use clap::{Parser, ValueEnum};
 use std::fmt;
+
+use clap::{Parser, ValueEnum};
+
+use crate::constants::DEFAULT_DUP_TAG;
 
 #[derive(Debug, Clone, ValueEnum)]
 pub enum Aggregation {

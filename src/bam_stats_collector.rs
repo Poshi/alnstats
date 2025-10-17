@@ -1,9 +1,11 @@
+use std::ops::AddAssign;
+
+use noodles::bam::Record;
+
 use crate::cli::Args;
 use crate::duplicate_stats::DuplicateStats;
 use crate::statistic::Statistic;
 use crate::yield_stats::PEYieldStats;
-use noodles::bam::Record;
-use std::ops::AddAssign;
 
 pub struct BamStatsCollector {
     pub stats: Vec<Box<dyn Statistic>>,

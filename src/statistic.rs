@@ -1,6 +1,8 @@
-use crate::constants::StatisticKind;
-use noodles::bam::Record;
 use std::any::Any;
+
+use noodles::bam::Record;
+
+use crate::constants::StatisticKind;
 
 /// Trait to accumulate information from a BAM `Record`.
 ///

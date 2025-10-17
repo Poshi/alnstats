@@ -7,19 +7,21 @@ mod runtime_error;
 mod statistic;
 mod yield_stats;
 
-use crate::bam_stats_collector::BamStatsCollector;
-use crate::cli::{Aggregation, AggregationKey, Args};
-use crate::constants::{ReadGroupTag, StatisticKind, UNKNOWN};
-use clap::Parser;
 use log::{debug, error, info, trace};
-use noodles::bam::io::reader::Builder;
-use noodles::bam::Record;
-use noodles::sam::alignment::record::data::field::{Tag, Value};
-use noodles::sam::Header;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
 use std::io::BufWriter;
+
+use clap::Parser;
+use noodles::bam::Record;
+use noodles::bam::io::reader::Builder;
+use noodles::sam::Header;
+use noodles::sam::alignment::record::data::field::{Tag, Value};
+
+use crate::bam_stats_collector::BamStatsCollector;
+use crate::cli::{Aggregation, Args};
+use crate::constants::{ReadGroupTag, StatisticKind, UNKNOWN};
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub enum AggregationKey {
@@ -40,16 +42,14 @@ fn get_read_groups(header: &Header) -> HashMap<String, HashMap<String, String>> 
         .map(|(k, map)| {
             let read_group_id = k.to_string().clone();
 
-            let entry: HashMap<String, String> = std::iter::once((
-                ReadGroupTag::Id.as_ref().to_string(),
-                read_group_id.clone(),
-            ))
-            .chain(
-                map.other_fields()
-                    .iter()
-                    .map(|(tag, value)| (format!("{tag}"), value.to_string().clone())),
-            )
-            .collect();
+            let entry: HashMap<String, String> =
+                std::iter::once((ReadGroupTag::Id.as_ref().to_string(), read_group_id.clone()))
+                    .chain(
+                        map.other_fields()
+                            .iter()
+                            .map(|(tag, value)| (format!("{tag}"), value.to_string().clone())),
+                    )
+                    .collect();
 
             (read_group_id, entry)
         })
@@ -70,10 +70,7 @@ fn get_rg_tag(record: &Record) -> Option<String> {
 type StatsPerRG = HashMap<String, BamStatsCollector>;
 type StatsPerKey = HashMap<AggregationKey, BamStatsCollector>;
 
-fn process_bam(
-    bam_filename: &String,
-    args: &Args,
-) -> Result<(Header, StatsPerRG), Box<dyn Error>> {
+fn process_bam(bam_filename: &String, args: &Args) -> Result<(Header, StatsPerRG), Box<dyn Error>> {
     // Open input file
     trace!("Opening input file: {bam_filename}");
     let mut reader = Builder.build_from_path(bam_filename)?;
@@ -151,10 +148,7 @@ fn aggregate_stats(
     aggregated_stats
 }
 
-fn write_results(
-    stats_per_aggregate_key: &StatsPerKey,
-    args: &Args,
-) -> Result<(), Box<dyn Error>> {
+fn write_results(stats_per_aggregate_key: &StatsPerKey, args: &Args) -> Result<(), Box<dyn Error>> {
     trace!("Generating JSON output...");
 
     let mut yield_results = serde_json::Map::new();

@@ -1,13 +1,14 @@
-use crate::constants::{DEFAULT_DUP_TAG, StatisticKind, SEQ_DUP_VALUE};
-use crate::runtime_error::RuntimeError;
-use crate::statistic::Statistic;
-use log::trace;
-use noodles::bam::Record;
-use noodles::sam::alignment::record::data::field::value::Value;
-use noodles::sam::alignment::record::Flags;
-use serde::Serialize;
 use std::collections::HashSet;
 use std::ops::AddAssign;
+use log::trace;
+
+use noodles::bam::Record;
+use noodles::sam::alignment::record::Flags;
+use noodles::sam::alignment::record::data::field::value::Value;use serde::Serialize;
+
+use crate::constants::{DEFAULT_DUP_TAG, SEQ_DUP_VALUE, StatisticKind};
+use crate::runtime_error::RuntimeError;
+use crate::statistic::Statistic;
 
 #[derive(Debug, Clone)]
 pub struct DuplicateStats {
@@ -179,7 +180,8 @@ impl DuplicateStats {
     }
 
     fn is_valid_duplicate_candidate(flags: &Flags) -> bool {
-        flags.is_duplicate() && !(flags.is_supplementary() || flags.is_secondary() || flags.is_unmapped())
+        flags.is_duplicate()
+            && !(flags.is_supplementary() || flags.is_secondary() || flags.is_unmapped())
     }
 
     fn is_optical_duplicate(record: &Record, duplicate_type_tags: &HashSet<String>) -> bool {
@@ -195,7 +197,6 @@ impl DuplicateStats {
                     && matches!(value, Value::String(s) if s == SEQ_DUP_VALUE)
             })
     }
-
 }
 
 #[derive(Debug, Serialize)]
@@ -237,7 +238,6 @@ impl From<&DuplicateStats> for DuplicateStatsJson {
 }
 
 impl Statistic for DuplicateStats {
-
     fn add_record(&mut self, rhs: &Record) {
         let flags = rhs.flags();
 
