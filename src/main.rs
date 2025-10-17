@@ -206,9 +206,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     debug!("Arguments: {args:?}");
 
-    // Process the BAM file, filling in the stats objects
+    // Process the BAM file, filling in the stats objects, we get stats per RGID
     let (header, stats_per_rg) = process_bam(&args.input, &args)?;
+
+    // We aggregate those stats by sample or library
     let aggregated_stats = aggregate_stats(&stats_per_rg, &header, &args);
+
+    // Finally, we write the results to disk
     write_results(&aggregated_stats, &args)?;
 
     Ok(())
