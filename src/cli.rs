@@ -18,12 +18,6 @@ impl fmt::Display for Aggregation {
     }
 }
 
-#[derive(PartialEq, Eq, Hash, Clone, Debug)]
-pub enum AggregationKey {
-    Sample(String),
-    Library(String, String),
-}
-
 /// Simple program to greet a person
 #[derive(Debug, Parser)]
 #[command(version, about, long_about = None)]

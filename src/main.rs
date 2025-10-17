@@ -21,6 +21,12 @@ use std::error::Error;
 use std::fs::File;
 use std::io::BufWriter;
 
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
+pub enum AggregationKey {
+    Sample(String),
+    Library(String, String),
+}
+
 fn init_stats_collector(args: &Args) -> BamStatsCollector {
     trace!("Initializing stats objects...");
 
