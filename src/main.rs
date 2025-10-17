@@ -29,12 +29,6 @@ pub enum AggregationKey {
     Library(String, String),
 }
 
-fn init_stats_collector(args: &Args) -> BamStatsCollector {
-    trace!("Initializing stats objects...");
-
-    BamStatsCollector::new(args)
-}
-
 fn get_read_groups(header: &Header) -> HashMap<String, HashMap<String, String>> {
     header
         .read_groups()
@@ -94,7 +88,7 @@ fn process_bam(bam_filename: &String, args: &Args) -> Result<(Header, StatsPerRG
 
                 let collector = stats_per_rg
                     .entry(rg_id)
-                    .or_insert_with(|| init_stats_collector(args));
+                    .or_insert_with(|| BamStatsCollector::new(args));
 
                 collector.process_record(&record);
             }
@@ -140,7 +134,7 @@ fn aggregate_stats(
 
         let target_stats_collector = aggregated_stats
             .entry(aggregation_key)
-            .or_insert_with(|| init_stats_collector(args));
+            .or_insert_with(|| BamStatsCollector::new(args));
 
         *target_stats_collector += stats_collector;
     }
