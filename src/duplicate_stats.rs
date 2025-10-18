@@ -9,6 +9,7 @@ use serde::Serialize;
 
 use crate::constants::{DEFAULT_DUP_TAG, SEQ_DUP_VALUE, StatisticKind};
 use crate::error::AppError;
+use crate::math::estimate_library_size;
 use crate::statistic::Statistic;
 
 #[derive(Debug, Clone)]
@@ -92,91 +93,11 @@ impl DuplicateStats {
     }
     */
 
-    fn estimate_library_size(read_pairs: u64, unique_read_pairs: u64) -> Result<u64, AppError> {
-        /// Estimate the size of the library.
-        ///
-        /// Estimates the size of a library based on the number of paired end molecules observed
-        /// and the number of unique pairs observed.
-        /// Based on the Lander-Waterman equation that states:
-        /// C/X = 1-exp(-N/X)
-        /// where
-        /// X = number of distinct molecules in library
-        /// N = number of read pairs
-        /// C = number of distinct fragments observed in read pairs
-        ///
-        /// Raises:
-        /// `RuntimeError`: if read pairs or duplicate pairs are zero
-        ///
-        /// Returns:
-        /// u64: the estimated size of the library
-        fn f(x: f64, c: f64, n: f64) -> f64 {
-            (c / x) - 1.0 + (-n / x).exp()
-        }
-
-        fn mid(x: f64, y: f64) -> f64 {
-            f64::midpoint(x, y)
-        }
-
-        let read_pair_duplicates = read_pairs - unique_read_pairs;
-
-        if read_pairs == 0 || read_pair_duplicates == 0 {
-            return Err(AppError::Runtime(String::from(
-                "Read pairs or duplicate pairs are zero!",
-            )));
-        }
-
-        let mut lower_bound: f64 = 1.0;
-        let mut upper_bound: f64 = 100.0;
-
-        if unique_read_pairs >= read_pairs
-            || f(
-                lower_bound * unique_read_pairs as f64,
-                unique_read_pairs as f64,
-                read_pairs as f64,
-            ) < 0.0
-        {
-            return Err(AppError::Runtime(format!(
-                "Invalid values for pairs and unique pairs: {read_pairs}, {unique_read_pairs}"
-            )));
-        }
-
-        // Find value of upper_bound, large enough to act as other side for bisection method
-        while f(
-            upper_bound * unique_read_pairs as f64,
-            unique_read_pairs as f64,
-            read_pairs as f64,
-        ) > 0.0
-        {
-            upper_bound *= 10.0;
-        }
-
-        // Use bisection method (no more than 40 times) to find solution
-        for _ in 0..40 {
-            let r = mid(lower_bound, upper_bound);
-            let u = f(
-                r * unique_read_pairs as f64,
-                unique_read_pairs as f64,
-                read_pairs as f64,
-            );
-            if u > 0.0 {
-                // Move lower bound up
-                lower_bound = r;
-            } else if u < 0.0 {
-                // Move upper bound down
-                upper_bound = r;
-            } else {
-                break;
-            }
-        }
-
-        Ok((unique_read_pairs as f64 * mid(lower_bound, upper_bound)) as u64)
-    }
-
     pub fn estimated_library_size(&self) -> Result<u64, AppError> {
         let read_pairs = self.read_pairs_examined() - self.read_pair_optical_duplicates();
         let unique_read_pairs = self.read_pairs_examined() - self.read_pair_duplicates();
 
-        DuplicateStats::estimate_library_size(read_pairs, unique_read_pairs)
+        estimate_library_size(read_pairs, unique_read_pairs)
     }
 
 
@@ -212,32 +133,64 @@ impl DuplicateStats {
     }
 }
 
-#[cfg(test)]
-impl DuplicateStats {
-    pub(crate) fn for_test(
-        duplicate_type_tags: HashSet<String>,
-        unpaired_reads_examined: u64,
-        pvt_read_pairs_examined: u64,
-        secondary_or_supplementary_rds: u64,
-        unmapped_reads: u64,
-        unpaired_read_duplicates: u64,
-        pvt_read_pair_duplicates: u64,
-        pvt_read_pair_optical_duplicates: u64,
-    ) -> Self {
-        Self {
-            duplicate_type_tags,
-            unpaired_reads_examined,
-            pvt_read_pairs_examined,
-            secondary_or_supplementary_rds,
-            unmapped_reads,
-            unpaired_read_duplicates,
-            pvt_read_pair_duplicates,
-            pvt_read_pair_optical_duplicates,
+impl Statistic for DuplicateStats {
+    fn add_record(&mut self, rhs: &Record) -> Result<(), AppError> {
+        let flags = rhs.flags();
+
+        if DuplicateStats::is_unmapped_read(&flags) {
+            self.unmapped_reads += 1;
+        } else if DuplicateStats::is_secondary_or_supplementary(&flags) {
+            self.secondary_or_supplementary_rds += 1;
+        } else if DuplicateStats::is_unpaired_read(&flags) {
+            self.unpaired_reads_examined += 1;
+        } else {
+            self.pvt_read_pairs_examined += 1;
         }
+
+        if DuplicateStats::is_valid_duplicate_candidate(&flags) {
+            if DuplicateStats::is_unpaired_read(&flags) {
+                self.unpaired_read_duplicates += 1;
+            } else {
+                self.pvt_read_pair_duplicates += 1;
+                if DuplicateStats::is_optical_duplicate(rhs, &self.duplicate_type_tags) {
+                    self.pvt_read_pair_optical_duplicates += 1
+                }
+            }
+        }
+
+        Ok(())
     }
 
-    pub fn unmapped_reads(&self) -> u64 {
-        self.unmapped_reads
+    fn as_json(&self) -> serde_json::Value {
+        serde_json::to_value(DuplicateStatsJson::from(self))
+            .expect("Failed to serialize DuplicateStats to JSON")
+    }
+
+    fn kind(&self) -> StatisticKind {
+        StatisticKind::Duplicate
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn add_assign_to_statistic(&mut self, other: &dyn Statistic) {
+        if let Some(other_concrete) = other.as_any().downcast_ref::<DuplicateStats>() {
+            *self += other_concrete;
+        }
+    }
+}
+
+impl AddAssign<&Self> for DuplicateStats {
+    fn add_assign(&mut self, rhs: &Self) {
+        assert_eq!(self.duplicate_type_tags, rhs.duplicate_type_tags);
+        self.unpaired_reads_examined += rhs.unpaired_reads_examined;
+        self.pvt_read_pairs_examined += rhs.pvt_read_pairs_examined;
+        self.secondary_or_supplementary_rds += rhs.secondary_or_supplementary_rds;
+        self.unmapped_reads += rhs.unmapped_reads;
+        self.unpaired_read_duplicates += rhs.unpaired_read_duplicates;
+        self.pvt_read_pair_duplicates += rhs.pvt_read_pair_duplicates;
+        self.pvt_read_pair_optical_duplicates += rhs.pvt_read_pair_optical_duplicates;
     }
 }
 
@@ -279,68 +232,32 @@ impl From<&DuplicateStats> for DuplicateStatsJson {
     }
 }
 
-impl Statistic for DuplicateStats {
-    fn add_record(&mut self, rhs: &Record) {
-        let flags = rhs.flags();
-
-        if DuplicateStats::is_unmapped_read(&flags) {
-            self.unmapped_reads += 1;
-        } else if DuplicateStats::is_secondary_or_supplementary(&flags) {
-            self.secondary_or_supplementary_rds += 1;
-        } else if DuplicateStats::is_unpaired_read(&flags) {
-            self.unpaired_reads_examined += 1;
-        } else {
-            self.pvt_read_pairs_examined += 1;
-        }
-
-        if DuplicateStats::is_valid_duplicate_candidate(&flags) {
-            if DuplicateStats::is_unpaired_read(&flags) {
-                self.unpaired_read_duplicates += 1;
-            } else {
-                self.pvt_read_pair_duplicates += 1;
-                if DuplicateStats::is_optical_duplicate(rhs, &self.duplicate_type_tags) {
-                    self.pvt_read_pair_optical_duplicates += 1
-                }
-            }
+#[cfg(test)]
+impl DuplicateStats {
+    pub(crate) fn for_test(
+        duplicate_type_tags: HashSet<String>,
+        unpaired_reads_examined: u64,
+        pvt_read_pairs_examined: u64,
+        secondary_or_supplementary_rds: u64,
+        unmapped_reads: u64,
+        unpaired_read_duplicates: u64,
+        pvt_read_pair_duplicates: u64,
+        pvt_read_pair_optical_duplicates: u64,
+    ) -> Self {
+        Self {
+            duplicate_type_tags,
+            unpaired_reads_examined,
+            pvt_read_pairs_examined,
+            secondary_or_supplementary_rds,
+            unmapped_reads,
+            unpaired_read_duplicates,
+            pvt_read_pair_duplicates,
+            pvt_read_pair_optical_duplicates,
         }
     }
 
-    fn as_json(&self) -> serde_json::Value {
-        serde_json::to_value(DuplicateStatsJson::from(self))
-            .expect("Failed to serialize DuplicateStats to JSON")
-    }
-
-    fn kind(&self) -> StatisticKind {
-        StatisticKind::Duplicate
-    }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn add_assign_to_statistic(&mut self, other: &dyn Statistic) {
-        if let Some(other_concrete) = other.as_any().downcast_ref::<DuplicateStats>() {
-            *self += other_concrete;
-        }
-    }
-}
-
-impl AddAssign<&Record> for DuplicateStats {
-    fn add_assign(&mut self, rhs: &Record) {
-        self.add_record(rhs);
-    }
-}
-
-impl AddAssign<&Self> for DuplicateStats {
-    fn add_assign(&mut self, rhs: &Self) {
-        assert_eq!(self.duplicate_type_tags, rhs.duplicate_type_tags);
-        self.unpaired_reads_examined += rhs.unpaired_reads_examined;
-        self.pvt_read_pairs_examined += rhs.pvt_read_pairs_examined;
-        self.secondary_or_supplementary_rds += rhs.secondary_or_supplementary_rds;
-        self.unmapped_reads += rhs.unmapped_reads;
-        self.unpaired_read_duplicates += rhs.unpaired_read_duplicates;
-        self.pvt_read_pair_duplicates += rhs.pvt_read_pair_duplicates;
-        self.pvt_read_pair_optical_duplicates += rhs.pvt_read_pair_optical_duplicates;
+    pub fn unmapped_reads(&self) -> u64 {
+        self.unmapped_reads
     }
 }
 

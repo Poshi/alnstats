@@ -4,6 +4,7 @@ mod cli;
 mod constants;
 mod duplicate_stats;
 mod error;
+mod math;
 mod statistic;
 mod yield_stats;
 
