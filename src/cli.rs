@@ -4,10 +4,10 @@ use clap::{Parser, ValueEnum};
 
 use crate::constants::DEFAULT_DUP_TAG;
 
-#[derive(Debug, Clone, ValueEnum)]
+#[derive(Debug, Clone, ValueEnum, Default)]
 pub enum Aggregation {
     Sample,
-    Library,
+    #[default] Library,
 }
 
 impl fmt::Display for Aggregation {
@@ -44,7 +44,7 @@ pub struct Args {
     pub duplicate_type_tag: Vec<String>,
 
     /// Level at which we want the data to be aggregated
-    #[arg(short, long, default_value_t=Aggregation::Library)]
+    #[arg(short, long, default_value_t)]
     pub aggregation: Aggregation,
 
     /// Be verbose
