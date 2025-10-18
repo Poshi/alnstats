@@ -60,6 +60,13 @@ fn get_rg_tag(record: &Record) -> Option<String> {
         })
 }
 
+fn get_rg_info<'a>(rg_map: Option<&'a HashMap<String, String>>, tag: &str) -> String {
+    rg_map
+        .and_then(|rg| rg.get(tag))
+        .cloned()
+        .unwrap_or_else(|| UNKNOWN.to_string())
+}
+
 type StatsPerRG = HashMap<String, BamStatsCollector>;
 type StatsPerKey = HashMap<AggregationKey, BamStatsCollector>;
 
@@ -111,22 +118,13 @@ fn aggregate_stats(
     for (rg_id, stats_collector) in stats_per_rg {
         let rg_map = read_groups_info.get(rg_id);
 
+        let sample = get_rg_info(rg_map, ReadGroupTag::Sample.as_ref());
         let aggregation_key = match &args.aggregation {
-            Aggregation::Sample => AggregationKey::Sample(
-                rg_map
-                    .and_then(|rg| rg.get(ReadGroupTag::Sample.as_ref()))
-                    .cloned()
-                    .unwrap_or_else(|| UNKNOWN.to_string()),
-            ),
+            Aggregation::Sample => {
+                AggregationKey::Sample(sample)
+            }
             Aggregation::Library => {
-                let sample = rg_map
-                    .and_then(|rg| rg.get(ReadGroupTag::Sample.as_ref()))
-                    .cloned()
-                    .unwrap_or_else(|| UNKNOWN.to_string());
-                let library = rg_map
-                    .and_then(|rg| rg.get(ReadGroupTag::Library.as_ref()))
-                    .cloned()
-                    .unwrap_or_else(|| UNKNOWN.to_string());
+                let library = get_rg_info(rg_map, ReadGroupTag::Library.as_ref());
                 AggregationKey::Library(sample, library)
             }
         };
