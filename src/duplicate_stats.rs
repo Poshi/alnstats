@@ -23,18 +23,10 @@ pub struct DuplicateStats {
     pvt_read_pair_optical_duplicates: u64,
 }
 
-impl DuplicateStats {
-    pub fn new(duplicate_type_tag: &[String]) -> Self {
-        trace!("Creating DuplicateStats struct");
-
-        let dt_tags: HashSet<String> = if duplicate_type_tag.is_empty() {
-            HashSet::from_iter(vec![DEFAULT_DUP_TAG.to_string()])
-        } else {
-            HashSet::from_iter(duplicate_type_tag.iter().cloned())
-        };
-
-        DuplicateStats {
-            duplicate_type_tags: dt_tags,
+impl Default for DuplicateStats {
+    fn default() -> Self {
+        Self {
+            duplicate_type_tags: HashSet::from_iter(vec![DEFAULT_DUP_TAG.to_string()]),
             unpaired_reads_examined: 0,
             pvt_read_pairs_examined: 0,
             secondary_or_supplementary_rds: 0,
@@ -43,6 +35,25 @@ impl DuplicateStats {
             pvt_read_pair_duplicates: 0,
             pvt_read_pair_optical_duplicates: 0,
         }
+    }
+}
+
+impl DuplicateStats {
+    pub fn new(duplicate_type_tag: &[String]) -> Self {
+        trace!("Creating DuplicateStats struct");
+
+        let mut new_stats = Self::default();
+
+        if !duplicate_type_tag.is_empty() {
+            new_stats.duplicate_type_tags = HashSet::from_iter(duplicate_type_tag.iter().cloned())
+        }
+
+        new_stats
+    }
+
+    #[cfg(test)]
+    pub fn unmapped_reads(&self) -> u64 {
+        self.unmapped_reads
     }
 
     pub fn read_pairs_examined(&self) -> u64 {
@@ -203,6 +214,16 @@ impl DuplicateStats {
                 duplicate_type_tags.contains(tag_str)
                     && matches!(value, Value::String(s) if s == SEQ_DUP_VALUE)
             })
+    }
+}
+
+#[cfg(test)]
+impl DuplicateStats {
+    pub(crate) fn for_test(unmapped_reads: u64) -> Self {
+        Self {
+            unmapped_reads,
+            ..Default::default()
+        }
     }
 }
 

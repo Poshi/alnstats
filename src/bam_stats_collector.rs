@@ -35,8 +35,110 @@ impl BamStatsCollector {
 
 impl AddAssign<&Self> for BamStatsCollector {
     fn add_assign(&mut self, rhs: &Self) {
+        assert_eq!(
+            self.stats.len(),
+            rhs.stats.len(),
+            "Cannot merge BamStatsCollectors with different sets of statistics."
+        );
         for (i, stat) in self.stats.iter_mut().enumerate() {
             stat.add_assign_to_statistic(rhs.stats[i].as_ref());
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cli::Args;
+    use clap::Parser;
+
+    #[test]
+    fn test_new_no_stats() {
+        let args = Args::parse_from(&["bamstats", "-i", "test.bam"]);
+        let collector = BamStatsCollector::new(&args);
+        assert!(collector.stats.is_empty());
+    }
+
+    #[test]
+    fn test_new_with_metrics() {
+        let args = Args::parse_from(&["bamstats", "-i", "test.bam", "-m", "metrics.txt"]);
+        let collector = BamStatsCollector::new(&args);
+        assert_eq!(collector.stats.len(), 1);
+        assert!(collector.stats[0]
+            .as_any()
+            .is::<DuplicateStats>());
+    }
+
+    #[test]
+    fn test_new_with_yield() {
+        let args = Args::parse_from(&["bamstats", "-i", "test.bam", "--yield", "yield.txt"]);
+        let collector = BamStatsCollector::new(&args);
+        assert_eq!(collector.stats.len(), 1);
+        assert!(collector.stats[0].as_any().is::<PEYieldStats>());
+    }
+
+    #[test]
+    fn test_new_with_all_stats() {
+        let args = Args::parse_from(&[
+            "bamstats",
+            "-i",
+            "test.bam",
+            "-m",
+            "metrics.txt",
+            "--yield",
+            "yield.txt",
+        ]);
+        let collector = BamStatsCollector::new(&args);
+        assert_eq!(collector.stats.len(), 2);
+        assert!(collector.stats[0]
+            .as_any()
+            .is::<DuplicateStats>());
+        assert!(collector.stats[1].as_any().is::<PEYieldStats>());
+    }
+
+    #[test]
+    fn test_add_assign() {
+        let args = Args::parse_from(&[
+            "bamstats",
+            "-i",
+            "test.bam",
+            "-m",
+            "metrics.txt",
+            "--yield",
+            "yield.txt",
+        ]);
+        let mut collector1 = BamStatsCollector::new(&args);
+        let mut collector2 = BamStatsCollector::new(&args);
+
+        collector1.stats[0] = Box::new(DuplicateStats::for_test(10));
+        collector2.stats[0] = Box::new(DuplicateStats::for_test(20));
+
+        collector1 += &collector2;
+
+        let final_stats = collector1.stats[0]
+            .as_any()
+            .downcast_ref::<DuplicateStats>()
+            .unwrap();
+        assert_eq!(final_stats.unmapped_reads(), 30);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_add_assign_panic() {
+        let args1 = Args::parse_from(&["bamstats", "-i", "test.bam", "-m", "metrics.txt"]);
+        let mut collector1 = BamStatsCollector::new(&args1);
+
+        let args2 = Args::parse_from(&[
+            "bamstats",
+            "-i",
+            "test.bam",
+            "-m",
+            "metrics.txt",
+            "--yield",
+            "yield.txt",
+        ]);
+        let collector2 = BamStatsCollector::new(&args2);
+
+        collector1 += &collector2;
     }
 }
