@@ -1,26 +1,21 @@
 // Project-wide constants.
 
+use strum::{AsRefStr, Display};
+
 // --- BAM Tags ---
 
 /// Default tag for duplicate type marking.
 pub const DEFAULT_DUP_TAG: &str = "dt";
 
 /// Enum for Read Group tags.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Display, AsRefStr)]
 pub enum ReadGroupTag {
+    #[strum(serialize = "ID")]
     Id,
+    #[strum(serialize = "SM")]
     Sample,
+    #[strum(serialize = "LB")]
     Library,
-}
-
-impl AsRef<str> for ReadGroupTag {
-    fn as_ref(&self) -> &str {
-        match self {
-            ReadGroupTag::Id => "ID",
-            ReadGroupTag::Sample => "SM",
-            ReadGroupTag::Library => "LB",
-        }
-    }
 }
 
 // --- BAM Tag Values ---
@@ -31,22 +26,14 @@ pub const SEQ_DUP_VALUE: &str = "SQ";
 // --- Statistic Kinds ---
 
 /// Enum for different kinds of statistics.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Display, AsRefStr)]
+#[strum(serialize_all = "snake_case")]
 pub enum StatisticKind {
     YieldPE,
     YieldSE,
     Duplicate,
 }
 
-impl AsRef<str> for StatisticKind {
-    fn as_ref(&self) -> &str {
-        match self {
-            StatisticKind::YieldPE => "yield_pe",
-            StatisticKind::YieldSE => "yield_se",
-            StatisticKind::Duplicate => "duplicate",
-        }
-    }
-}
 
 // --- Default / Fallback Values ---
 
