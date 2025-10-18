@@ -86,7 +86,7 @@ impl DuplicateStats {
     }
     */
 
-    pub fn estimated_library_size(&self) -> Result<u64, AppError> {
+    fn estimate_library_size(read_pairs: u64, unique_read_pairs: u64) -> Result<u64, AppError> {
         /// Estimate the size of the library.
         ///
         /// Estimates the size of a library based on the number of paired end molecules observed
@@ -111,8 +111,6 @@ impl DuplicateStats {
             f64::midpoint(x, y)
         }
 
-        let read_pairs = self.read_pairs_examined() - self.read_pair_optical_duplicates();
-        let unique_read_pairs = self.read_pairs_examined() - self.read_pair_duplicates();
         let read_pair_duplicates = read_pairs - unique_read_pairs;
 
         if read_pairs == 0 || read_pair_duplicates == 0 {
@@ -167,6 +165,14 @@ impl DuplicateStats {
 
         Ok((unique_read_pairs as f64 * mid(lower_bound, upper_bound)) as u64)
     }
+
+    pub fn estimated_library_size(&self) -> Result<u64, AppError> {
+        let read_pairs = self.read_pairs_examined() - self.read_pair_optical_duplicates();
+        let unique_read_pairs = self.read_pairs_examined() - self.read_pair_duplicates();
+
+        DuplicateStats::estimate_library_size(read_pairs, unique_read_pairs)
+    }
+
 
     fn is_unmapped_read(flags: &Flags) -> bool {
         flags.is_unmapped()
@@ -306,6 +312,7 @@ impl AddAssign<&Self> for DuplicateStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // use noodles::sam::alignment::record::Flags; // Removed redundant import
 
     #[test]
     fn test_duplicatestats_add_assign() {
@@ -341,5 +348,181 @@ mod tests {
         assert_eq!(stats1.unpaired_read_duplicates, 3);
         assert_eq!(stats1.pvt_read_pair_duplicates, 30);
         assert_eq!(stats1.pvt_read_pair_optical_duplicates, 9);
+    }
+
+    #[test]
+    fn test_new_default_tag() {
+        let stats = DuplicateStats::new(&[]);
+        assert!(stats.duplicate_type_tags.contains(DEFAULT_DUP_TAG));
+        assert_eq!(stats.duplicate_type_tags.len(), 1);
+    }
+
+    #[test]
+    fn test_new_custom_tag() {
+        let custom_tag = String::from("XT");
+        let stats = DuplicateStats::new(&[custom_tag.clone()]);
+        assert!(stats.duplicate_type_tags.contains(&custom_tag));
+        assert_eq!(stats.duplicate_type_tags.len(), 1);
+    }
+
+    #[test]
+    fn test_new_multiple_custom_tags() {
+        let tags = vec![String::from("XT"), String::from("YD")];
+        let stats = DuplicateStats::new(&tags);
+        assert!(stats.duplicate_type_tags.contains("XT"));
+        assert!(stats.duplicate_type_tags.contains("YD"));
+        assert_eq!(stats.duplicate_type_tags.len(), 2);
+    }
+
+    #[test]
+    fn test_read_pairs_examined() {
+        let mut stats = DuplicateStats::new(&[]);
+        stats.pvt_read_pairs_examined = 100;
+        assert_eq!(stats.read_pairs_examined(), 50);
+    }
+
+    #[test]
+    fn test_read_pair_duplicates() {
+        let mut stats = DuplicateStats::new(&[]);
+        stats.pvt_read_pair_duplicates = 50;
+        assert_eq!(stats.read_pair_duplicates(), 25);
+    }
+
+    #[test]
+    fn test_read_pair_optical_duplicates() {
+        let mut stats = DuplicateStats::new(&[]);
+        stats.pvt_read_pair_optical_duplicates = 10;
+        assert_eq!(stats.read_pair_optical_duplicates(), 5);
+    }
+
+    #[test]
+    fn test_percent_duplication_zero_denominator() {
+        let stats = DuplicateStats::new(&[]);
+        assert_eq!(stats.percent_duplication(), 0.0);
+    }
+
+    #[test]
+    fn test_percent_duplication_valid_cases() {
+        let stats = DuplicateStats {
+            duplicate_type_tags: HashSet::new(),
+            unpaired_reads_examined: 10,
+            pvt_read_pairs_examined: 20, // 10 pairs
+            secondary_or_supplementary_rds: 0,
+            unmapped_reads: 0,
+            unpaired_read_duplicates: 5,
+            pvt_read_pair_duplicates: 4, // 2 pairs
+            pvt_read_pair_optical_duplicates: 0,
+        };
+        // (2 * 2 + 5) / (2 * 10 + 10) = 9 / 30 = 0.3
+        assert_eq!(stats.percent_duplication(), 0.3);
+    }
+
+    #[test]
+    fn test_estimated_library_size_read_pairs_zero_error() {
+        let stats = DuplicateStats::new(&[]);
+        let err = stats.estimated_library_size().unwrap_err();
+        assert!(matches!(err, AppError::Runtime(_)));
+    }
+
+    #[test]
+    fn test_estimated_library_size_duplicate_pairs_zero_error() {
+        let mut stats = DuplicateStats::new(&[]);
+        stats.pvt_read_pairs_examined = 2; // 1 pair
+        let err = stats.estimated_library_size().unwrap_err();
+        assert!(matches!(err, AppError::Runtime(_)));
+    }
+
+    #[test]
+    fn test_estimated_library_size_invalid_unique_pairs_error() {
+        let mut stats = DuplicateStats::new(&[]);
+        stats.pvt_read_pairs_examined = 2; // 1 pair
+        stats.pvt_read_pair_duplicates = 0; // 0 duplicates, so unique_read_pairs = 1
+        // unique_read_pairs (1) >= read_pairs (1) should trigger error
+        let err = stats.estimated_library_size().unwrap_err();
+        assert!(matches!(err, AppError::Runtime(_)));
+    }
+
+    #[test]
+    fn test_estimated_library_size_valid_case() {
+        // Example from Picard documentation
+        let mut stats = DuplicateStats::new(&[]);
+        stats.pvt_read_pairs_examined = 2000000; // 1,000,000 pairs
+        stats.pvt_read_pair_duplicates = 1000000; // 500,000 duplicates
+        // unique_read_pairs = 1,000,000 - 500,000 = 500,000
+        // read_pairs = 1,000,000
+        // read_pair_duplicates = 500,000
+        let estimated_size = stats.estimated_library_size().unwrap();
+        // The actual value from Picard is 627500. Due to floating point and bisection, it might be slightly off.
+        assert!((estimated_size as f64 - 627500.0).abs() < 0.5);
+    }
+
+    use noodles::sam::alignment::record::Flags;
+
+    #[test]
+    fn test_is_unmapped_read() {
+        assert!(DuplicateStats::is_unmapped_read(&Flags::UNMAPPED));
+        assert!(!DuplicateStats::is_unmapped_read(&Flags::empty()));
+    }
+
+    #[test]
+    fn test_is_secondary_or_supplementary() {
+        assert!(DuplicateStats::is_secondary_or_supplementary(&Flags::SECONDARY));
+        assert!(DuplicateStats::is_secondary_or_supplementary(&Flags::SUPPLEMENTARY));
+        assert!(!DuplicateStats::is_secondary_or_supplementary(&Flags::empty()));
+    }
+
+    #[test]
+    fn test_is_unpaired_read() {
+        // Not segmented, so unpaired
+        assert!(DuplicateStats::is_unpaired_read(&Flags::empty()));
+        // Segmented, but mate unmapped, so unpaired
+        assert!(DuplicateStats::is_unpaired_read(&(Flags::SEGMENTED | Flags::MATE_UNMAPPED)));
+        // Segmented and mate mapped, so paired
+        assert!(!DuplicateStats::is_unpaired_read(&(Flags::SEGMENTED)));
+    }
+
+    #[test]
+    fn test_is_valid_duplicate_candidate() {
+        // Is duplicate, not secondary, not supplementary, not unmapped
+        assert!(DuplicateStats::is_valid_duplicate_candidate(&Flags::DUPLICATE));
+        // Not duplicate
+        assert!(!DuplicateStats::is_valid_duplicate_candidate(&Flags::empty()));
+        // Is duplicate, but secondary
+        assert!(!DuplicateStats::is_valid_duplicate_candidate(&(Flags::DUPLICATE | Flags::SECONDARY)));
+        // Is duplicate, but supplementary
+        assert!(!DuplicateStats::is_valid_duplicate_candidate(&(Flags::DUPLICATE | Flags::SUPPLEMENTARY)));
+        // Is duplicate, but unmapped
+        assert!(!DuplicateStats::is_valid_duplicate_candidate(&(Flags::DUPLICATE | Flags::UNMAPPED)));
+    }
+
+    #[test]
+    fn test_duplicatestats_as_json() {
+        let stats = DuplicateStats {
+            duplicate_type_tags: HashSet::from_iter(vec![DEFAULT_DUP_TAG.to_string()]),
+            unpaired_reads_examined: 10,
+            pvt_read_pairs_examined: 100,
+            secondary_or_supplementary_rds: 5,
+            unmapped_reads: 2,
+            unpaired_read_duplicates: 1,
+            pvt_read_pair_duplicates: 10,
+            pvt_read_pair_optical_duplicates: 3,
+        };
+        let json = stats.as_json();
+        assert_eq!(json["UNPAIRED_READS_EXAMINED"], 10);
+        assert_eq!(json["READ_PAIRS_EXAMINED"], 50);
+        assert_eq!(json["SECONDARY_OR_SUPPLEMENTARY_RDS"], 5);
+        assert_eq!(json["UNMAPPED_READS"], 2);
+        assert_eq!(json["UNPAIRED_READ_DUPLICATES"], 1);
+        assert_eq!(json["READ_PAIR_DUPLICATES"], 5);
+        assert_eq!(json["READ_PAIR_OPTICAL_DUPLICATES"], 1);
+        // percent_duplication = (2*5 + 1) / (2*50 + 10) = 11 / 110 = 0.1
+        assert_eq!(json["PERCENT_DUPLICATION"], 0.1);
+        assert_eq!(json["ESTIMATED_LIBRARY_SIZE"], 283);
+    }
+
+    #[test]
+    fn test_duplicatestats_kind() {
+        let stats = DuplicateStats::new(&[]);
+        assert_eq!(stats.kind(), StatisticKind::Duplicate);
     }
 }
