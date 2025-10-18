@@ -9,7 +9,7 @@ mod yield_stats;
 
 use crate::bam_stats_collector::BamStatsCollector;
 use crate::cli::{Args, Aggregation};
-use crate::constants::{ReadGroupTag, StatisticKind, UNKNOWN};
+use crate::constants::{ReadGroupTag, StatisticKind, UNKNOWN, RECORDS_LOG_INTERVAL};
 use crate::error::AppError;
 use clap::Parser;
 use log::{debug, error, info, trace};
@@ -76,7 +76,7 @@ fn process_bam(bam_filename: &String, args: &Args) -> Result<(Header, StatsPerRG
     // Traverse input file while filling in the stats
     trace!("Processing BAM records...");
     for (i, rec) in reader.records().enumerate() {
-        if i > 0 && i % 10_000_000 == 0 {
+        if i > 0 && i % RECORDS_LOG_INTERVAL == 0 {
             info!("{i} elements processed...");
         }
 

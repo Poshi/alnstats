@@ -34,6 +34,8 @@ pub enum StatisticKind {
     Duplicate,
 }
 
+/// Frequency of user updates
+pub const RECORDS_LOG_INTERVAL: usize = 10_000_000;
 
 // --- Default / Fallback Values ---
 
