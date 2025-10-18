@@ -50,7 +50,9 @@ impl AddAssign<&Self> for BamStatsCollector {
 mod tests {
     use super::*;
     use crate::cli::Args;
+    use crate::constants::DEFAULT_DUP_TAG;
     use clap::Parser;
+    use std::collections::HashSet;
 
     #[test]
     fn test_new_no_stats() {
@@ -110,8 +112,26 @@ mod tests {
         let mut collector1 = BamStatsCollector::new(&args);
         let mut collector2 = BamStatsCollector::new(&args);
 
-        collector1.stats[0] = Box::new(DuplicateStats::for_test(10));
-        collector2.stats[0] = Box::new(DuplicateStats::for_test(20));
+        collector1.stats[0] = Box::new(DuplicateStats::for_test(
+            HashSet::from_iter(vec![DEFAULT_DUP_TAG.to_string()]),
+            0,
+            0,
+            0,
+            10,
+            0,
+            0,
+            0,
+        ));
+        collector2.stats[0] = Box::new(DuplicateStats::for_test(
+            HashSet::from_iter(vec![DEFAULT_DUP_TAG.to_string()]),
+            0,
+            0,
+            0,
+            20,
+            0,
+            0,
+            0,
+        ));
 
         collector1 += &collector2;
 

@@ -219,10 +219,25 @@ impl DuplicateStats {
 
 #[cfg(test)]
 impl DuplicateStats {
-    pub(crate) fn for_test(unmapped_reads: u64) -> Self {
+    pub(crate) fn for_test(
+        duplicate_type_tags: HashSet<String>,
+        unpaired_reads_examined: u64,
+        pvt_read_pairs_examined: u64,
+        secondary_or_supplementary_rds: u64,
+        unmapped_reads: u64,
+        unpaired_read_duplicates: u64,
+        pvt_read_pair_duplicates: u64,
+        pvt_read_pair_optical_duplicates: u64,
+    ) -> Self {
         Self {
+            duplicate_type_tags,
+            unpaired_reads_examined,
+            pvt_read_pairs_examined,
+            secondary_or_supplementary_rds,
             unmapped_reads,
-            ..Default::default()
+            unpaired_read_duplicates,
+            pvt_read_pair_duplicates,
+            pvt_read_pair_optical_duplicates,
         }
     }
 }
@@ -336,27 +351,41 @@ mod tests {
     // use noodles::sam::alignment::record::Flags; // Removed redundant import
 
     #[test]
+    fn test_default() {
+        let stats = DuplicateStats::default();
+        assert!(stats.duplicate_type_tags.contains(DEFAULT_DUP_TAG));
+        assert_eq!(stats.duplicate_type_tags.len(), 1);
+        assert_eq!(stats.unpaired_reads_examined, 0);
+        assert_eq!(stats.pvt_read_pairs_examined, 0);
+        assert_eq!(stats.secondary_or_supplementary_rds, 0);
+        assert_eq!(stats.unmapped_reads, 0);
+        assert_eq!(stats.unpaired_read_duplicates, 0);
+        assert_eq!(stats.pvt_read_pair_duplicates, 0);
+        assert_eq!(stats.pvt_read_pair_optical_duplicates, 0);
+    }
+
+    #[test]
     fn test_duplicatestats_add_assign() {
-        let mut stats1 = DuplicateStats {
-            duplicate_type_tags: HashSet::from_iter(vec![DEFAULT_DUP_TAG.to_string()]),
-            unpaired_reads_examined: 10,
-            pvt_read_pairs_examined: 100,
-            secondary_or_supplementary_rds: 5,
-            unmapped_reads: 2,
-            unpaired_read_duplicates: 1,
-            pvt_read_pair_duplicates: 10,
-            pvt_read_pair_optical_duplicates: 3,
-        };
-        let stats2 = DuplicateStats {
-            duplicate_type_tags: HashSet::from_iter(vec![DEFAULT_DUP_TAG.to_string()]),
-            unpaired_reads_examined: 20,
-            pvt_read_pairs_examined: 200,
-            secondary_or_supplementary_rds: 10,
-            unmapped_reads: 4,
-            unpaired_read_duplicates: 2,
-            pvt_read_pair_duplicates: 20,
-            pvt_read_pair_optical_duplicates: 6,
-        };
+        let mut stats1 = DuplicateStats::for_test(
+            HashSet::from_iter(vec![DEFAULT_DUP_TAG.to_string()]),
+            10,
+            100,
+            5,
+            2,
+            1,
+            10,
+            3,
+        );
+        let stats2 = DuplicateStats::for_test(
+            HashSet::from_iter(vec![DEFAULT_DUP_TAG.to_string()]),
+            20,
+            200,
+            10,
+            4,
+            2,
+            20,
+            6,
+        );
         stats1 += &stats2;
 
         let expected_tags = HashSet::from_iter(vec![DEFAULT_DUP_TAG.to_string()]);
@@ -397,57 +426,57 @@ mod tests {
 
     #[test]
     fn test_read_pairs_examined() {
-        let mut stats = DuplicateStats::new(&[]);
+        let mut stats = DuplicateStats::default();
         stats.pvt_read_pairs_examined = 100;
         assert_eq!(stats.read_pairs_examined(), 50);
     }
 
     #[test]
     fn test_read_pair_duplicates() {
-        let mut stats = DuplicateStats::new(&[]);
+        let mut stats = DuplicateStats::default();
         stats.pvt_read_pair_duplicates = 50;
         assert_eq!(stats.read_pair_duplicates(), 25);
     }
 
     #[test]
     fn test_read_pair_optical_duplicates() {
-        let mut stats = DuplicateStats::new(&[]);
+        let mut stats = DuplicateStats::default();
         stats.pvt_read_pair_optical_duplicates = 10;
         assert_eq!(stats.read_pair_optical_duplicates(), 5);
     }
 
     #[test]
     fn test_percent_duplication_zero_denominator() {
-        let stats = DuplicateStats::new(&[]);
+        let stats = DuplicateStats::default();
         assert_eq!(stats.percent_duplication(), 0.0);
     }
 
     #[test]
     fn test_percent_duplication_valid_cases() {
-        let stats = DuplicateStats {
-            duplicate_type_tags: HashSet::new(),
-            unpaired_reads_examined: 10,
-            pvt_read_pairs_examined: 20, // 10 pairs
-            secondary_or_supplementary_rds: 0,
-            unmapped_reads: 0,
-            unpaired_read_duplicates: 5,
-            pvt_read_pair_duplicates: 4, // 2 pairs
-            pvt_read_pair_optical_duplicates: 0,
-        };
+        let stats = DuplicateStats::for_test(
+            HashSet::new(),
+            10,
+            20, // 10 pairs
+            0,
+            0,
+            5,
+            4, // 2 pairs
+            0,
+        );
         // (2 * 2 + 5) / (2 * 10 + 10) = 9 / 30 = 0.3
         assert_eq!(stats.percent_duplication(), 0.3);
     }
 
     #[test]
     fn test_estimated_library_size_read_pairs_zero_error() {
-        let stats = DuplicateStats::new(&[]);
+        let stats = DuplicateStats::default();
         let err = stats.estimated_library_size().unwrap_err();
         assert!(matches!(err, AppError::Runtime(_)));
     }
 
     #[test]
     fn test_estimated_library_size_duplicate_pairs_zero_error() {
-        let mut stats = DuplicateStats::new(&[]);
+        let mut stats = DuplicateStats::default();
         stats.pvt_read_pairs_examined = 2; // 1 pair
         let err = stats.estimated_library_size().unwrap_err();
         assert!(matches!(err, AppError::Runtime(_)));
@@ -455,7 +484,7 @@ mod tests {
 
     #[test]
     fn test_estimated_library_size_invalid_unique_pairs_error() {
-        let mut stats = DuplicateStats::new(&[]);
+        let mut stats = DuplicateStats::default();
         stats.pvt_read_pairs_examined = 2; // 1 pair
         stats.pvt_read_pair_duplicates = 0; // 0 duplicates, so unique_read_pairs = 1
         // unique_read_pairs (1) >= read_pairs (1) should trigger error
@@ -466,7 +495,7 @@ mod tests {
     #[test]
     fn test_estimated_library_size_valid_case() {
         // Example from Picard documentation
-        let mut stats = DuplicateStats::new(&[]);
+        let mut stats = DuplicateStats::default();
         stats.pvt_read_pairs_examined = 2000000; // 1,000,000 pairs
         stats.pvt_read_pair_duplicates = 1000000; // 500,000 duplicates
         // unique_read_pairs = 1,000,000 - 500,000 = 500,000
@@ -518,16 +547,16 @@ mod tests {
 
     #[test]
     fn test_duplicatestats_as_json() {
-        let stats = DuplicateStats {
-            duplicate_type_tags: HashSet::from_iter(vec![DEFAULT_DUP_TAG.to_string()]),
-            unpaired_reads_examined: 10,
-            pvt_read_pairs_examined: 100,
-            secondary_or_supplementary_rds: 5,
-            unmapped_reads: 2,
-            unpaired_read_duplicates: 1,
-            pvt_read_pair_duplicates: 10,
-            pvt_read_pair_optical_duplicates: 3,
-        };
+        let stats = DuplicateStats::for_test(
+            HashSet::from_iter(vec![DEFAULT_DUP_TAG.to_string()]),
+            10,
+            100,
+            5,
+            2,
+            1,
+            10,
+            3,
+        );
         let json = stats.as_json();
         assert_eq!(json["UNPAIRED_READS_EXAMINED"], 10);
         assert_eq!(json["READ_PAIRS_EXAMINED"], 50);
@@ -543,7 +572,7 @@ mod tests {
 
     #[test]
     fn test_duplicatestats_kind() {
-        let stats = DuplicateStats::new(&[]);
+        let stats = DuplicateStats::default();
         assert_eq!(stats.kind(), StatisticKind::Duplicate);
     }
 }
