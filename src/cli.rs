@@ -20,7 +20,10 @@ impl fmt::Display for Aggregation {
     }
 }
 
-/// Simple program to greet a person
+/// BAM file statistics calculator.
+///
+/// It computes yield and duplicate statistics.
+/// Duplicate statistics are made to ressemble Picard ones.
 #[derive(Debug, Parser)]
 #[command(version, about, long_about = None)]
 pub struct Args {
