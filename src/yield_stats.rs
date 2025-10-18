@@ -1,5 +1,6 @@
 use crate::cigar_ext::CigarExt;
 use crate::constants::StatisticKind;
+use crate::error::AppError;
 use crate::statistic::Statistic;
 use log::warn;
 use noodles::bam::Record;
@@ -15,13 +16,15 @@ pub struct SEYieldStats {
 }
 
 impl Statistic for SEYieldStats {
-    fn add_record(&mut self, record: &Record) {
+    fn add_record(&mut self, record: &Record) -> Result<(), AppError> {
         let seq_length = record.sequence().len() as u64;
 
         self.n_reads += 1;
         self.max_length = self.max_length.max(seq_length);
         self.clipped_yield += u64::from(record.cigar().query_alignment_length());
         self.total_yield += seq_length;
+
+        Ok(())
     }
 
     fn as_json(&self) -> serde_json::Value {
@@ -65,11 +68,11 @@ pub struct PEYieldStats {
 }
 
 impl Statistic for PEYieldStats {
-    fn add_record(&mut self, record: &Record) {
+    fn add_record(&mut self, record: &Record) -> Result<(), AppError> {
         let flags = record.flags();
 
         if flags.is_supplementary() || flags.is_secondary() {
-            return;
+            return Ok(());
         }
 
         if flags.is_first_segment() {
@@ -79,6 +82,8 @@ impl Statistic for PEYieldStats {
         } else {
             warn!("Warning: read is not marked as first or last segment. Skipping.");
         }
+
+        Ok(())
     }
 
     fn as_json(&self) -> serde_json::Value {

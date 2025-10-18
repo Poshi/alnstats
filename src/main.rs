@@ -96,7 +96,9 @@ fn process_bam(bam_filename: &String, args: &Args) -> Result<(Header, StatsPerRG
                     .entry(rg_id)
                     .or_insert_with(|| BamStatsCollector::new(args));
 
-                collector.add_record(&record);
+                if let Err(e) = collector.add_record(&record) {
+                    error!("Error processing record: {}", e);
+                }
             }
             Err(e) => {
                 error!("Error reading record {i}: {e}");
@@ -147,6 +149,7 @@ fn write_output(
     let file = File::create(filename)?;
     let writer = BufWriter::new(file);
     serde_json::to_writer_pretty(writer, data)?;
+
     Ok(())
 }
 
@@ -159,21 +162,15 @@ fn write_results(stats_per_aggregate_key: &StatsPerKey, args: &Args) -> Result<(
     for (key, stats_collector) in stats_per_aggregate_key {
         for stat in &stats_collector.stats {
             let json_val = stat.as_json();
+            let target_map = match stat.kind() {
+                StatisticKind::YieldPE | StatisticKind::YieldSE => &mut yield_results,
+                StatisticKind::Duplicate => &mut duplicate_results,
+            };
             match key {
-                AggregationKey::Sample(sample_name) => match stat.kind() {
-                    StatisticKind::YieldPE | StatisticKind::YieldSE => {
-                        yield_results.insert(sample_name.clone(), json_val);
-                    }
-                    StatisticKind::Duplicate => {
-                        duplicate_results.insert(sample_name.clone(), json_val);
-                    }
-                },
+                AggregationKey::Sample(sample_name) => {
+                    target_map.insert(sample_name.clone(), json_val);
+                }
                 AggregationKey::Library(sample_name, library_name) => {
-                    let target_map = match stat.kind() {
-                        StatisticKind::YieldPE | StatisticKind::YieldSE => &mut yield_results,
-                        StatisticKind::Duplicate => &mut duplicate_results,
-                    };
-
                     let sample_entry = target_map
                         .entry(sample_name.clone())
                         .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));

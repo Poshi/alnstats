@@ -1,3 +1,4 @@
+use crate::error::AppError;
 use std::ops::AddAssign;
 
 use noodles::bam::Record;
@@ -26,10 +27,12 @@ impl BamStatsCollector {
         Self { stats }
     }
 
-    pub fn add_record(&mut self, record: &Record) {
+    pub fn add_record(&mut self, record: &Record) -> Result<(), AppError> {
         for stat in self.stats.iter_mut() {
-            stat.add_record(record);
+            stat.add_record(record)?;
         }
+
+        Ok(())
     }
 }
 
