@@ -467,6 +467,25 @@ mod tests {
     }
 
     #[test]
+    fn test_percent_duplication_more_cases() {
+        // Only unpaired reads, some duplicates
+        let stats1 = DuplicateStats::for_test(HashSet::new(), 100, 0, 0, 0, 10, 0, 0);
+        assert_eq!(stats1.percent_duplication(), 0.1);
+
+        // Only paired reads, some duplicates
+        let stats2 = DuplicateStats::for_test(HashSet::new(), 0, 200, 0, 0, 0, 20, 0);
+        assert_eq!(stats2.percent_duplication(), 0.1);
+
+        // No duplicates
+        let stats3 = DuplicateStats::for_test(HashSet::new(), 100, 200, 0, 0, 0, 0, 0);
+        assert_eq!(stats3.percent_duplication(), 0.0);
+
+        // All duplicates
+        let stats4 = DuplicateStats::for_test(HashSet::new(), 100, 200, 0, 0, 100, 200, 0);
+        assert_eq!(stats4.percent_duplication(), 1.0);
+    }
+
+    #[test]
     fn test_estimated_library_size_read_pairs_zero_error() {
         let stats = DuplicateStats::default();
         let err = stats.estimated_library_size().unwrap_err();

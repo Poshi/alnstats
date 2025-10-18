@@ -118,7 +118,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn new_seyieldstats() {
+    fn test_seyieldstats_default() {
         let result = SEYieldStats::default();
         assert_eq!(
             result,
@@ -132,7 +132,7 @@ mod tests {
     }
 
     #[test]
-    fn new_peyieldstats() {
+    fn test_peyieldstats_default() {
         let result = PEYieldStats::default();
         assert_eq!(
             result,
@@ -279,23 +279,48 @@ mod tests {
 
     #[test]
     fn test_seyieldstats_add_assign_to_statistic() {
-        let mut stats1 = SEYieldStats::default();
-        stats1.n_reads = 1;
+        let mut stats1 = SEYieldStats {
+            n_reads: 1,
+            max_length: 5,
+            clipped_yield: 10,
+            total_yield: 15,
+        };
         let stats2 = SEYieldStats { n_reads: 2, max_length: 10, clipped_yield: 20, total_yield: 30 };
         stats1.add_assign_to_statistic(&stats2);
         assert_eq!(stats1.n_reads, 3);
+        assert_eq!(stats1.max_length, 10);
+        assert_eq!(stats1.clipped_yield, 30);
+        assert_eq!(stats1.total_yield, 45);
     }
 
     #[test]
     fn test_peyieldstats_add_assign_to_statistic() {
-        let mut stats1 = PEYieldStats::default();
-        stats1.first_end.n_reads = 1;
+        let mut stats1 = PEYieldStats {
+            first_end: SEYieldStats {
+                n_reads: 1,
+                max_length: 5,
+                clipped_yield: 10,
+                total_yield: 15,
+            },
+            second_end: SEYieldStats {
+                n_reads: 1,
+                max_length: 5,
+                clipped_yield: 10,
+                total_yield: 15,
+            },
+        };
         let stats2 = PEYieldStats {
-            first_end: SEYieldStats { n_reads: 2, ..Default::default() },
-            second_end: SEYieldStats { n_reads: 3, ..Default::default() },
+            first_end: SEYieldStats { n_reads: 2, max_length: 10, clipped_yield: 20, total_yield: 30 },
+            second_end: SEYieldStats { n_reads: 3, max_length: 12, clipped_yield: 22, total_yield: 32 },
         };
         stats1.add_assign_to_statistic(&stats2);
         assert_eq!(stats1.first_end.n_reads, 3);
-        assert_eq!(stats1.second_end.n_reads, 3);
+        assert_eq!(stats1.first_end.max_length, 10);
+        assert_eq!(stats1.first_end.clipped_yield, 30);
+        assert_eq!(stats1.first_end.total_yield, 45);
+        assert_eq!(stats1.second_end.n_reads, 4);
+        assert_eq!(stats1.second_end.max_length, 12);
+        assert_eq!(stats1.second_end.clipped_yield, 32);
+        assert_eq!(stats1.second_end.total_yield, 47);
     }
 }
