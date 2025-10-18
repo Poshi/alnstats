@@ -2,7 +2,6 @@ use crate::cigar_ext::CigarExt;
 use crate::constants::StatisticKind;
 use crate::error::AppError;
 use crate::statistic::Statistic;
-use log::warn;
 use noodles::bam::Record;
 use serde::Serialize;
 use std::ops::AddAssign;
@@ -74,7 +73,7 @@ impl Statistic for PEYieldStats {
         } else if flags.is_last_segment() {
             self.second_end.add_record(record)?;
         } else {
-            warn!("Warning: read is not marked as first or last segment. Skipping.");
+            return Err(AppError::NotFirstNotLastSegment());
         }
 
         Ok(())

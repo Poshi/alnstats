@@ -11,4 +11,7 @@ pub enum AppError {
 
     #[error("{0}")]
     Runtime(String),
+
+    #[error("Read neither first nor last in template")]
+    NotFirstNotLastSegment()
 }

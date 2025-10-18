@@ -1,6 +1,7 @@
 use crate::error::AppError;
 use std::ops::AddAssign;
 
+use log::warn;
 use noodles::bam::Record;
 
 use crate::cli::Args;
@@ -29,7 +30,15 @@ impl BamStatsCollector {
 
     pub fn add_record(&mut self, record: &Record) -> Result<(), AppError> {
         for stat in self.stats.iter_mut() {
-            stat.add_record(record)?;
+            if let Err(error) = stat.add_record(record) {
+                match error {
+                    AppError::NotFirstNotLastSegment() => {
+                        warn!("Warning: read is not marked as first or last segment. Skipping.");
+                        return Ok(())
+                    }
+                    _ => return Err(error)
+                }
+            }
         }
 
         Ok(())
