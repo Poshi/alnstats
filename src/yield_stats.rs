@@ -46,12 +46,6 @@ impl Statistic for SEYieldStats {
     }
 }
 
-impl AddAssign<&Record> for SEYieldStats {
-    fn add_assign(&mut self, rhs: &Record) {
-        self.add_record(rhs);
-    }
-}
-
 impl AddAssign<&Self> for SEYieldStats {
     fn add_assign(&mut self, rhs: &Self) {
         self.n_reads += rhs.n_reads;
@@ -76,9 +70,9 @@ impl Statistic for PEYieldStats {
         }
 
         if flags.is_first_segment() {
-            self.first_end += record;
+            self.first_end.add_record(record)?;
         } else if flags.is_last_segment() {
-            self.second_end += record;
+            self.second_end.add_record(record)?;
         } else {
             warn!("Warning: read is not marked as first or last segment. Skipping.");
         }
@@ -102,12 +96,6 @@ impl Statistic for PEYieldStats {
         if let Some(other_concrete) = other.as_any().downcast_ref::<PEYieldStats>() {
             *self += other_concrete;
         }
-    }
-}
-
-impl AddAssign<&Record> for PEYieldStats {
-    fn add_assign(&mut self, rhs: &Record) {
-        self.add_record(rhs);
     }
 }
 
