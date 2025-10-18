@@ -51,11 +51,6 @@ impl DuplicateStats {
         new_stats
     }
 
-    #[cfg(test)]
-    pub fn unmapped_reads(&self) -> u64 {
-        self.unmapped_reads
-    }
-
     pub fn read_pairs_examined(&self) -> u64 {
         self.pvt_read_pairs_examined / 2
     }
@@ -239,6 +234,10 @@ impl DuplicateStats {
             pvt_read_pair_duplicates,
             pvt_read_pair_optical_duplicates,
         }
+    }
+
+    pub fn unmapped_reads(&self) -> u64 {
+        self.unmapped_reads
     }
 }
 
