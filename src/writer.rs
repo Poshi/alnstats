@@ -24,20 +24,22 @@ fn insert_value(
     key: &AggregationKey,
     json_val: Value,
 ) {
-    match key {
+    let (leaf_map, leaf_key) = match key {
         AggregationKey::Sample(sample_name) => {
-            target_map.insert(sample_name.clone(), json_val);
+            (target_map, sample_name.clone())
         }
         AggregationKey::Library(sample_name, library_name) => {
             let sample_entry = target_map
                 .entry(sample_name.clone())
-                .or_insert_with(|| Value::Object(serde_json::Map::new()));
+                .or_insert_with(|| Value::Object(serde_json::Map::new()))
+                .as_object_mut()
+                .unwrap();
 
-            if let Some(sample_map) = sample_entry.as_object_mut() {
-                sample_map.insert(library_name.clone(), json_val);
-            }
+            (sample_entry, library_name.clone())
         }
-    }
+    };
+
+    leaf_map.insert(leaf_key, json_val);
 }
 
 pub fn write_results(stats_per_aggregate_key: &StatsPerKey, args: &Args) -> Result<(), AppError> {
