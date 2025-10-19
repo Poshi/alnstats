@@ -49,7 +49,7 @@ pub fn write_results(stats_per_aggregate_key: &StatsPerKey, args: &Args) -> Resu
     let mut duplicate_results = serde_json::Map::new();
 
     for (key, stats_collector) in stats_per_aggregate_key {
-        for stat in &stats_collector.stats {
+        for stat in stats_collector.stats.values() {
             let destination = match stat.kind() {
                 StatisticKind::YieldPE | StatisticKind::YieldSE => &mut yield_results,
                 StatisticKind::Duplicate => &mut duplicate_results,

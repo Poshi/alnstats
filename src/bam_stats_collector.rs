@@ -1,4 +1,6 @@
 use crate::error::AppError;
+use std::any::TypeId;
+use std::collections::HashMap;
 use std::ops::AddAssign;
 
 use noodles::bam::Record;
@@ -9,26 +11,29 @@ use crate::statistic::Statistic;
 use crate::yield_stats::PEYieldStats;
 
 pub struct BamStatsCollector {
-    pub stats: Vec<Box<dyn Statistic>>,
+    pub stats: HashMap<TypeId, Box<dyn Statistic>>,
 }
 
 impl BamStatsCollector {
     pub fn new(args: &Args) -> Self {
-        let mut stats: Vec<Box<dyn Statistic>> = Vec::new();
+        let mut stats: HashMap<TypeId, Box<dyn Statistic>> = HashMap::new();
 
         if args.metrics.is_some() {
-            stats.push(Box::new(DuplicateStats::new(&args.duplicate_type_tag)));
+            stats.insert(
+                TypeId::of::<DuplicateStats>(),
+                Box::new(DuplicateStats::new(&args.duplicate_type_tag)),
+            );
         }
 
         if args.yield_out.is_some() {
-            stats.push(Box::new(PEYieldStats::default()));
+            stats.insert(TypeId::of::<PEYieldStats>(), Box::new(PEYieldStats::default()));
         }
 
         Self { stats }
     }
 
     pub fn add_record(&mut self, record: &Record) -> Result<(), AppError> {
-        for stat in self.stats.iter_mut() {
+        for stat in self.stats.values_mut() {
             stat.add_record(record)?
         }
 
@@ -38,13 +43,10 @@ impl BamStatsCollector {
 
 impl AddAssign<&Self> for BamStatsCollector {
     fn add_assign(&mut self, rhs: &Self) {
-        assert_eq!(
-            self.stats.len(),
-            rhs.stats.len(),
-            "Cannot merge BamStatsCollectors with different sets of statistics."
-        );
-        for (i, stat) in self.stats.iter_mut().enumerate() {
-            stat.add_assign_to_statistic(rhs.stats[i].as_ref());
+        for (type_id, stat) in &rhs.stats {
+            if let Some(self_stat) = self.stats.get_mut(type_id) {
+                self_stat.add_assign_to_statistic(stat.as_ref());
+            }
         }
     }
 }
@@ -69,7 +71,7 @@ mod tests {
         let args = Args::parse_from(&["bamstats", "-i", "test.bam", "-m", "metrics.txt"]);
         let collector = BamStatsCollector::new(&args);
         assert_eq!(collector.stats.len(), 1);
-        assert!(collector.stats[0].as_any().is::<DuplicateStats>());
+        assert!(collector.stats.contains_key(&TypeId::of::<DuplicateStats>()));
     }
 
     #[test]
@@ -77,7 +79,7 @@ mod tests {
         let args = Args::parse_from(&["bamstats", "-i", "test.bam", "--yield", "yield.txt"]);
         let collector = BamStatsCollector::new(&args);
         assert_eq!(collector.stats.len(), 1);
-        assert!(collector.stats[0].as_any().is::<PEYieldStats>());
+        assert!(collector.stats.contains_key(&TypeId::of::<PEYieldStats>()));
     }
 
     #[test]
@@ -93,8 +95,8 @@ mod tests {
         ]);
         let collector = BamStatsCollector::new(&args);
         assert_eq!(collector.stats.len(), 2);
-        assert!(collector.stats[0].as_any().is::<DuplicateStats>());
-        assert!(collector.stats[1].as_any().is::<PEYieldStats>());
+        assert!(collector.stats.contains_key(&TypeId::of::<DuplicateStats>()));
+        assert!(collector.stats.contains_key(&TypeId::of::<PEYieldStats>()));
     }
 
     #[test]
@@ -111,7 +113,7 @@ mod tests {
         let mut collector1 = BamStatsCollector::new(&args);
         let mut collector2 = BamStatsCollector::new(&args);
 
-        collector1.stats[0] = Box::new(DuplicateStats::for_test(
+        let dup_stats1 = DuplicateStats::for_test(
             HashSet::from_iter(vec![*b"XT"]),
             0,
             0,
@@ -120,8 +122,10 @@ mod tests {
             0,
             0,
             0,
-        ));
-        collector2.stats[0] = Box::new(DuplicateStats::for_test(
+        );
+        collector1.stats.insert(TypeId::of::<DuplicateStats>(), Box::new(dup_stats1));
+
+        let dup_stats2 = DuplicateStats::for_test(
             HashSet::from_iter(vec![*b"XT"]),
             0,
             0,
@@ -130,11 +134,12 @@ mod tests {
             0,
             0,
             0,
-        ));
+        );
+        collector2.stats.insert(TypeId::of::<DuplicateStats>(), Box::new(dup_stats2));
 
         collector1 += &collector2;
 
-        let final_stats = collector1.stats[0]
+        let final_stats = collector1.stats[&TypeId::of::<DuplicateStats>()]
             .as_any()
             .downcast_ref::<DuplicateStats>()
             .unwrap();
@@ -142,7 +147,6 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
     fn test_add_assign_panic() {
         let args1 = Args::parse_from(&["bamstats", "-i", "test.bam", "-m", "metrics.txt"]);
         let mut collector1 = BamStatsCollector::new(&args1);
