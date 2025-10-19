@@ -1,10 +1,11 @@
-use log::trace;
+use log::{trace, warn};
 use std::collections::HashSet;
 use std::ops::AddAssign;
 
 use noodles::bam::Record;
-use noodles::sam::alignment::record::Flags;
 use noodles::sam::alignment::record::data::field::value::Value;
+
+use noodles::sam::alignment::record::Flags;
 use serde::Serialize;
 
 use crate::constants::{DEFAULT_DUP_TAG, SEQ_DUP_VALUE, StatisticKind};
@@ -18,7 +19,7 @@ pub struct DuplicateStats {
     // They refer to "pairs", but in reality, keep an accounting of single reads.
     // When retrieving them thru the getters, their value is divided by 2 to get
     // the real value that they should contain.
-    duplicate_type_tags: HashSet<String>,
+    duplicate_type_tags: HashSet<[u8; 2]>,
     unpaired_reads_examined: u64,
     pvt_read_pairs_examined: u64,
     secondary_or_supplementary_rds: u64,
@@ -31,7 +32,9 @@ pub struct DuplicateStats {
 impl Default for DuplicateStats {
     fn default() -> Self {
         Self {
-            duplicate_type_tags: HashSet::from_iter(vec![DEFAULT_DUP_TAG.to_string()]),
+            duplicate_type_tags: HashSet::from_iter(vec![DEFAULT_DUP_TAG.as_bytes()
+                .try_into()
+                .unwrap()]),
             unpaired_reads_examined: 0,
             pvt_read_pairs_examined: 0,
             secondary_or_supplementary_rds: 0,
@@ -50,7 +53,17 @@ impl DuplicateStats {
         let mut new_stats = Self::default();
 
         if !duplicate_type_tag.is_empty() {
-            new_stats.duplicate_type_tags = HashSet::from_iter(duplicate_type_tag.iter().cloned())
+            new_stats.duplicate_type_tags = duplicate_type_tag
+                .iter()
+                .filter_map(|tag| {
+                    if tag.len() == 2 {
+                        Some(tag.as_bytes().try_into().unwrap())
+                    } else {
+                        warn!("Ignoring invalid duplicate tag: {tag}");
+                        None
+                    }
+                })
+                .collect()
         }
 
         new_stats
@@ -105,16 +118,13 @@ impl DuplicateStats {
             && !(flags.is_supplementary() || flags.is_secondary() || flags.is_unmapped())
     }
 
-    fn is_optical_duplicate(record: &Record, duplicate_type_tags: &HashSet<String>) -> bool {
+    fn is_optical_duplicate(record: &Record, duplicate_type_tags: &HashSet<[u8; 2]>) -> bool {
         record
             .data()
             .iter()
             .filter_map(Result::ok)
             .any(|(tag, value)| {
-                // Convert tag (2 bytes) to String for comparison
-                let tag_str = std::str::from_utf8(tag.as_ref()).unwrap_or("");
-
-                duplicate_type_tags.contains(tag_str)
+                duplicate_type_tags.contains(tag.as_ref())
                     && matches!(value, Value::String(s) if s == SEQ_DUP_VALUE)
             })
     }
@@ -224,7 +234,7 @@ impl From<&DuplicateStats> for DuplicateStatsJson {
 #[cfg(test)]
 impl DuplicateStats {
     pub(crate) fn for_test(
-        duplicate_type_tags: HashSet<String>,
+        duplicate_type_tags: HashSet<[u8; 2]>,
         unpaired_reads_examined: u64,
         pvt_read_pairs_examined: u64,
         secondary_or_supplementary_rds: u64,
@@ -258,7 +268,7 @@ mod tests {
     #[test]
     fn test_default() {
         let stats = DuplicateStats::default();
-        assert!(stats.duplicate_type_tags.contains(DEFAULT_DUP_TAG));
+        assert!(stats.duplicate_type_tags.contains(DEFAULT_DUP_TAG.as_bytes()));
         assert_eq!(stats.duplicate_type_tags.len(), 1);
         assert_eq!(stats.unpaired_reads_examined, 0);
         assert_eq!(stats.pvt_read_pairs_examined, 0);
@@ -272,7 +282,7 @@ mod tests {
     #[test]
     fn test_duplicatestats_add_assign() {
         let mut stats1 = DuplicateStats::for_test(
-            HashSet::from_iter(vec![DEFAULT_DUP_TAG.to_string()]),
+            HashSet::from_iter(vec![*b"XT"]),
             10,
             100,
             5,
@@ -282,7 +292,7 @@ mod tests {
             3,
         );
         let stats2 = DuplicateStats::for_test(
-            HashSet::from_iter(vec![DEFAULT_DUP_TAG.to_string()]),
+            HashSet::from_iter(vec![*b"XT"]),
             20,
             200,
             10,
@@ -293,7 +303,7 @@ mod tests {
         );
         stats1 += &stats2;
 
-        let expected_tags = HashSet::from_iter(vec![DEFAULT_DUP_TAG.to_string()]);
+        let expected_tags = HashSet::from_iter(vec![*b"XT"]);
 
         assert_eq!(stats1.duplicate_type_tags, expected_tags);
         assert_eq!(stats1.unpaired_reads_examined, 30);
@@ -308,7 +318,7 @@ mod tests {
     #[test]
     fn test_new_default_tag() {
         let stats = DuplicateStats::new(&[]);
-        assert!(stats.duplicate_type_tags.contains(DEFAULT_DUP_TAG));
+        assert!(stats.duplicate_type_tags.contains(DEFAULT_DUP_TAG.as_bytes()));
         assert_eq!(stats.duplicate_type_tags.len(), 1);
     }
 
@@ -316,7 +326,7 @@ mod tests {
     fn test_new_custom_tag() {
         let custom_tag = String::from("XT");
         let stats = DuplicateStats::new(&[custom_tag.clone()]);
-        assert!(stats.duplicate_type_tags.contains(&custom_tag));
+        assert!(stats.duplicate_type_tags.contains::<[u8; 2]>(&custom_tag.as_bytes().try_into().unwrap()));
         assert_eq!(stats.duplicate_type_tags.len(), 1);
     }
 
@@ -324,8 +334,8 @@ mod tests {
     fn test_new_multiple_custom_tags() {
         let tags = vec![String::from("XT"), String::from("YD")];
         let stats = DuplicateStats::new(&tags);
-        assert!(stats.duplicate_type_tags.contains("XT"));
-        assert!(stats.duplicate_type_tags.contains("YD"));
+        assert!(stats.duplicate_type_tags.contains(b"XT"));
+        assert!(stats.duplicate_type_tags.contains(b"YD"));
         assert_eq!(stats.duplicate_type_tags.len(), 2);
     }
 
@@ -508,7 +518,7 @@ mod tests {
     #[test]
     fn test_duplicatestats_as_json() {
         let stats = DuplicateStats::for_test(
-            HashSet::from_iter(vec![DEFAULT_DUP_TAG.to_string()]),
+            HashSet::from_iter(vec![*b"XT"]),
             10,
             100,
             5,
