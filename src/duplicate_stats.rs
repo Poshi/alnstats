@@ -77,22 +77,6 @@ impl DuplicateStats {
             / (self.read_pairs_examined() * 2 + self.unpaired_reads_examined) as f64
     }
 
-    /*
-    pub fn total_reads(&self) -> u64 {
-        (self.read_pairs_examined * 2) + self.unpaired_reads_examined + self.unmapped_reads
-    }
-
-    pub fn total_clusters(&self) -> Result<u64, RuntimeError> {
-        let total_reads = self.total_reads();
-
-        if (total_reads % 2) != 0 {
-            Err(RuntimeError(String::from("The number of reads should be an even number.")))
-        } else {
-            Ok(total_reads / 2)
-        }
-    }
-    */
-
     pub fn estimated_library_size(&self) -> Result<u64, AppError> {
         let read_pairs = self.read_pairs_examined() - self.read_pair_optical_duplicates();
         let unique_read_pairs = self.read_pairs_examined() - self.read_pair_duplicates();
