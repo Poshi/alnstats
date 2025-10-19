@@ -17,7 +17,8 @@ fn f(x: f64, c: f64, n: f64) -> f64 {
 /// C = number of distinct fragments observed in read pairs
 ///
 /// Raises:
-/// `RuntimeError`: if read pairs or duplicate pairs are zero
+/// `AppError::ZeroReads`: if read pairs or duplicate pairs are zero
+/// `AppError::InvalidValues`: if there are more unique read pairs than read pairs
 ///
 /// Returns:
 /// u64: the estimated size of the library
@@ -25,9 +26,10 @@ pub fn estimate_library_size(read_pairs: u64, unique_read_pairs: u64) -> Result<
     let read_pair_duplicates = read_pairs - unique_read_pairs;
 
     if read_pairs == 0 || read_pair_duplicates == 0 {
-        return Err(AppError::Runtime(String::from(
-            "Read pairs or duplicate pairs are zero!",
-        )));
+        return Err(AppError::ZeroReads {
+            read_pairs,
+            read_pair_duplicates,
+        });
     }
 
     let mut lower_bound: f64 = 1.0;
@@ -40,9 +42,10 @@ pub fn estimate_library_size(read_pairs: u64, unique_read_pairs: u64) -> Result<
             read_pairs as f64,
         ) < 0.0
     {
-        return Err(AppError::Runtime(format!(
-            "Invalid values for pairs and unique pairs: {read_pairs}, {unique_read_pairs}"
-        )));
+        return Err(AppError::InvalidValues {
+            read_pairs,
+            unique_read_pairs,
+        });
     }
 
     // Find value of upper_bound, large enough to act as other side for bisection method

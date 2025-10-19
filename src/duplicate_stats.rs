@@ -144,9 +144,8 @@ impl Statistic for DuplicateStats {
         Ok(())
     }
 
-    fn as_json(&self) -> serde_json::Value {
-        serde_json::to_value(DuplicateStatsJson::from(self))
-            .expect("Failed to serialize DuplicateStats to JSON")
+    fn as_json(&self) -> Result<serde_json::Value, AppError> {
+        Ok(serde_json::to_value(DuplicateStatsJson::from(self))?)
     }
 
     fn kind(&self) -> StatisticKind {
@@ -389,7 +388,13 @@ mod tests {
     fn test_estimated_library_size_read_pairs_zero_error() {
         let stats = DuplicateStats::default();
         let err = stats.estimated_library_size().unwrap_err();
-        assert!(matches!(err, AppError::Runtime(_)));
+        assert!(matches!(
+            err,
+            AppError::ZeroReads {
+                read_pairs: _,
+                read_pair_duplicates: _
+            }
+        ));
     }
 
     #[test]
@@ -397,7 +402,13 @@ mod tests {
         let mut stats = DuplicateStats::default();
         stats.pvt_read_pairs_examined = 2; // 1 pair
         let err = stats.estimated_library_size().unwrap_err();
-        assert!(matches!(err, AppError::Runtime(_)));
+        assert!(matches!(
+            err,
+            AppError::ZeroReads {
+                read_pairs: _,
+                read_pair_duplicates: _
+            }
+        ));
     }
 
     #[test]
@@ -407,7 +418,13 @@ mod tests {
         stats.pvt_read_pair_duplicates = 0; // 0 duplicates, so unique_read_pairs = 1
         // unique_read_pairs (1) >= read_pairs (1) should trigger error
         let err = stats.estimated_library_size().unwrap_err();
-        assert!(matches!(err, AppError::Runtime(_)));
+        assert!(matches!(
+            err,
+            AppError::ZeroReads {
+                read_pairs: _,
+                read_pair_duplicates: _
+            }
+        ));
     }
 
     #[test]
@@ -493,7 +510,7 @@ mod tests {
             10,
             3,
         );
-        let json = stats.as_json();
+        let json = stats.as_json().unwrap();
         assert_eq!(json["UNPAIRED_READS_EXAMINED"], 10);
         assert_eq!(json["READ_PAIRS_EXAMINED"], 50);
         assert_eq!(json["SECONDARY_OR_SUPPLEMENTARY_RDS"], 5);

@@ -159,7 +159,7 @@ fn write_results(stats_per_aggregate_key: &StatsPerKey, args: &Args) -> Result<(
 
     for (key, stats_collector) in stats_per_aggregate_key {
         for stat in &stats_collector.stats {
-            let json_val = stat.as_json();
+            let json_val = stat.as_json()?;
             let target_map = match stat.kind() {
                 StatisticKind::YieldPE | StatisticKind::YieldSE => &mut yield_results,
                 StatisticKind::Duplicate => &mut duplicate_results,
