@@ -3,7 +3,7 @@ use std::any::TypeId;
 use std::collections::HashMap;
 use std::ops::AddAssign;
 
-use noodles::bam::Record;
+use noodles::sam::alignment::Record;
 
 use crate::cli::Args;
 use crate::duplicate_stats::DuplicateStats;
@@ -32,7 +32,7 @@ impl BamStatsCollector {
         Self { stats }
     }
 
-    pub fn add_record(&mut self, record: &Record) -> Result<(), AppError> {
+    pub fn add_record(&mut self, record: &dyn Record) -> Result<(), AppError> {
         for stat in self.stats.values_mut() {
             stat.add_record(record)?
         }

@@ -2,7 +2,7 @@ use crate::cigar_ext::CigarExt;
 use crate::constants::StatisticKind;
 use crate::error::AppError;
 use crate::statistic::Statistic;
-use noodles::bam::Record;
+use noodles::sam::alignment::Record;
 use serde::Serialize;
 use std::ops::AddAssign;
 use log::warn;
@@ -17,7 +17,7 @@ pub struct SEYieldStats {
 }
 
 impl Statistic for SEYieldStats {
-    fn add_record(&mut self, record: &Record) -> Result<(), AppError> {
+    fn add_record(&mut self, record: &dyn Record) -> Result<(), AppError> {
         let seq_length = record.sequence().len() as u64;
 
         self.n_reads += 1;
@@ -63,8 +63,8 @@ pub struct PEYieldStats {
 }
 
 impl Statistic for PEYieldStats {
-    fn add_record(&mut self, record: &Record) -> Result<(), AppError> {
-        let flags = record.flags();
+    fn add_record(&mut self, record: &dyn Record) -> Result<(), AppError> {
+        let flags = record.flags()?;
 
         if flags.is_supplementary() || flags.is_secondary() {
             return Ok(());
@@ -110,6 +110,77 @@ impl AddAssign<&Self> for PEYieldStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use noodles::sam::alignment::RecordBuf;
+    use noodles::sam::alignment::record::cigar::op::Kind;
+    use noodles::sam::alignment::record::cigar::Op;
+    use noodles::sam::alignment::Record;
+    use noodles::sam::alignment::record::Flags;
+    use noodles::sam::Header;
+
+    fn build_header() -> Header {
+        Header::builder().build()
+    }
+
+    #[test]
+    fn test_seyieldstats_add_record() {
+        let mut stats = SEYieldStats::default();
+
+        let cigar = vec![Op::new(Kind::Match, 4)].into();
+        let record_buf = RecordBuf::builder()
+            .set_sequence(b"ACGT".to_vec().into())
+            .set_cigar(cigar)
+            .build();
+
+        stats.add_record(&record_buf).unwrap();
+
+        assert_eq!(stats.n_reads, 1);
+        assert_eq!(stats.max_length, 4);
+        assert_eq!(stats.clipped_yield, 4);
+        assert_eq!(stats.total_yield, 4);
+    }
+
+    #[test]
+    fn test_peyieldstats_add_record() {
+        let mut stats = PEYieldStats::default();
+        let header = build_header();
+
+        // First segment
+        let cigar1 = vec![Op::new(Kind::Match, 4)].into();
+        let record_buf_1 = RecordBuf::builder()
+            .set_flags(Flags::SEGMENTED | Flags::FIRST_SEGMENT)
+            .set_sequence(b"ACGT".to_vec().into())
+            .set_cigar(cigar1)
+            .build();
+        let record_1 = Record::try_from_record(&header, &record_buf_1).unwrap();
+        stats.add_record(&record_1).unwrap();
+
+        // Second segment
+        let cigar2 = vec![Op::new(Kind::Match, 7)].into();
+        let record_buf_2 = RecordBuf::builder()
+            .set_flags(Flags::SEGMENTED | Flags::LAST_SEGMENT)
+            .set_sequence(b"GATTACA".to_vec().into())
+            .set_cigar(cigar2)
+            .build();
+        let record_2 = Record::try_from_record(&header, &record_buf_2).unwrap();
+        stats.add_record(&record_2).unwrap();
+
+        // Neither first nor last
+        let record_buf_3 = RecordBuf::builder()
+            .set_flags(Flags::SEGMENTED)
+            .build();
+        let record_3 = Record::try_from_record(&header, &record_buf_3).unwrap();
+        stats.add_record(&record_3).unwrap();
+
+        assert_eq!(stats.first_end.n_reads, 1);
+        assert_eq!(stats.first_end.max_length, 4);
+        assert_eq!(stats.first_end.clipped_yield, 4);
+        assert_eq!(stats.first_end.total_yield, 4);
+
+        assert_eq!(stats.second_end.n_reads, 1);
+        assert_eq!(stats.second_end.max_length, 7);
+        assert_eq!(stats.second_end.clipped_yield, 7);
+        assert_eq!(stats.second_end.total_yield, 7);
+    }
 
     #[test]
     fn test_seyieldstats_default() {

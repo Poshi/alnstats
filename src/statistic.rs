@@ -1,6 +1,6 @@
 use std::any::Any;
 
-use noodles::bam::Record;
+use noodles::sam::alignment::Record;
 
 use crate::constants::StatisticKind;
 use crate::error::AppError;
@@ -10,7 +10,7 @@ use crate::error::AppError;
 /// This trait is object-safe so it can be used as `Box<dyn AddRecord>`.
 pub trait Statistic: Any {
     /// Accumulate a record into the stats object.
-    fn add_record(&mut self, record: &Record) -> Result<(), AppError>;
+    fn add_record(&mut self, record: &dyn Record) -> Result<(), AppError>;
 
     /// Return a JSON representation of the current state.
     /// Implementations should rely on `serde` to build the value.

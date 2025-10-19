@@ -4,7 +4,7 @@ use crate::constants::{RECORDS_LOG_INTERVAL, ReadGroupTag, UNKNOWN};
 use crate::error::AppError;
 use log::{info, trace, warn};
 use noodles::bam::io::reader::Builder;
-use noodles::bam::Record;
+use noodles::sam::alignment::Record;
 use noodles::sam::alignment::record::data::field::{Tag, Value};
 use noodles::sam::Header;
 use std::collections::HashMap;
@@ -36,7 +36,7 @@ fn get_read_groups(header: &Header) -> HashMap<String, HashMap<String, String>> 
         .collect()
 }
 
-fn get_rg_tag(record: &Record) -> Option<String> {
+fn get_rg_tag(record: &dyn Record) -> Option<String> {
     record
         .data()
         .get(&Tag::READ_GROUP)

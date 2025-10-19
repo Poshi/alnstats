@@ -2,7 +2,7 @@ use log::{trace, warn};
 use std::collections::HashSet;
 use std::ops::AddAssign;
 
-use noodles::bam::Record;
+use noodles::sam::alignment::Record;
 use noodles::sam::alignment::record::data::field::value::Value;
 
 use noodles::sam::alignment::record::Flags;
@@ -118,7 +118,7 @@ impl DuplicateStats {
             && !(flags.is_supplementary() || flags.is_secondary() || flags.is_unmapped())
     }
 
-    fn is_optical_duplicate(record: &Record, duplicate_type_tags: &HashSet<[u8; 2]>) -> bool {
+    fn is_optical_duplicate(record: &dyn Record, duplicate_type_tags: &HashSet<[u8; 2]>) -> bool {
         record
             .data()
             .iter()
@@ -131,8 +131,8 @@ impl DuplicateStats {
 }
 
 impl Statistic for DuplicateStats {
-    fn add_record(&mut self, rhs: &Record) -> Result<(), AppError> {
-        let flags = rhs.flags();
+    fn add_record(&mut self, rhs: &dyn Record) -> Result<(), AppError> {
+        let flags = rhs.flags()?;
 
         if DuplicateStats::is_unmapped_read(&flags) {
             self.unmapped_reads += 1;
