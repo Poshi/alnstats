@@ -113,13 +113,7 @@ mod tests {
     use noodles::sam::alignment::RecordBuf;
     use noodles::sam::alignment::record::cigar::op::Kind;
     use noodles::sam::alignment::record::cigar::Op;
-    use noodles::sam::alignment::Record;
     use noodles::sam::alignment::record::Flags;
-    use noodles::sam::Header;
-
-    fn build_header() -> Header {
-        Header::builder().build()
-    }
 
     #[test]
     fn test_seyieldstats_add_record() {
@@ -142,7 +136,6 @@ mod tests {
     #[test]
     fn test_peyieldstats_add_record() {
         let mut stats = PEYieldStats::default();
-        let header = build_header();
 
         // First segment
         let cigar1 = vec![Op::new(Kind::Match, 4)].into();
@@ -151,8 +144,7 @@ mod tests {
             .set_sequence(b"ACGT".to_vec().into())
             .set_cigar(cigar1)
             .build();
-        let record_1 = Record::try_from_record(&header, &record_buf_1).unwrap();
-        stats.add_record(&record_1).unwrap();
+        stats.add_record(&record_buf_1).unwrap();
 
         // Second segment
         let cigar2 = vec![Op::new(Kind::Match, 7)].into();
@@ -161,15 +153,13 @@ mod tests {
             .set_sequence(b"GATTACA".to_vec().into())
             .set_cigar(cigar2)
             .build();
-        let record_2 = Record::try_from_record(&header, &record_buf_2).unwrap();
-        stats.add_record(&record_2).unwrap();
+        stats.add_record(&record_buf_2).unwrap();
 
         // Neither first nor last
         let record_buf_3 = RecordBuf::builder()
             .set_flags(Flags::SEGMENTED)
             .build();
-        let record_3 = Record::try_from_record(&header, &record_buf_3).unwrap();
-        stats.add_record(&record_3).unwrap();
+        stats.add_record(&record_buf_3).unwrap();
 
         assert_eq!(stats.first_end.n_reads, 1);
         assert_eq!(stats.first_end.max_length, 4);
