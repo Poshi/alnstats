@@ -5,6 +5,8 @@ use crate::statistic::Statistic;
 use noodles::bam::Record;
 use serde::Serialize;
 use std::ops::AddAssign;
+use log::warn;
+
 
 #[derive(Debug, Serialize, PartialEq, Clone, Default)]
 pub struct SEYieldStats {
@@ -73,7 +75,7 @@ impl Statistic for PEYieldStats {
         } else if flags.is_last_segment() {
             self.second_end.add_record(record)?;
         } else {
-            return Err(AppError::NotFirstNotLastSegment());
+            warn!("Warning: read is not marked as first or last segment. Skipping.")
         }
 
         Ok(())

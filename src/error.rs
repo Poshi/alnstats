@@ -9,9 +9,6 @@ pub enum AppError {
     #[error("JSON serialization error")]
     Json(#[from] serde_json::Error),
 
-    #[error("Read neither first nor last in template")]
-    NotFirstNotLastSegment(),
-
     #[error("Read pairs ({read_pairs}) or duplicate pairs ({read_pair_duplicates}) are zero!")]
     ZeroReads {
         read_pairs: u64,
