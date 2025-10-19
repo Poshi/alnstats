@@ -14,6 +14,10 @@ use crate::statistic::Statistic;
 
 #[derive(Debug, Clone)]
 pub struct DuplicateStats {
+    // The pvt_* members are intended to be private.
+    // They refer to "pairs", but in reality, keep an accounting of single reads.
+    // When retrieving them thru the getters, their value is divided by 2 to get
+    // the real value that they should contain.
     duplicate_type_tags: HashSet<String>,
     unpaired_reads_examined: u64,
     pvt_read_pairs_examined: u64,
