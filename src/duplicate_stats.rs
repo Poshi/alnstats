@@ -209,6 +209,9 @@ impl From<&DuplicateStats> for DuplicateStatsJson {
             read_pair_duplicates: stats.read_pair_duplicates(),
             read_pair_optical_duplicates: stats.read_pair_optical_duplicates(),
             percent_duplication: stats.percent_duplication(),
+            // We know that the calculus do not make sense for some inputs.
+            // That will cause the estimated_library_size calculus to fail.
+            // In that case, we want to return a zero to the user.
             estimated_library_size: stats.estimated_library_size().unwrap_or(0),
         }
     }
