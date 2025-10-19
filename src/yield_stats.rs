@@ -277,7 +277,12 @@ mod tests {
             clipped_yield: 10,
             total_yield: 15,
         };
-        let stats2 = SEYieldStats { n_reads: 2, max_length: 10, clipped_yield: 20, total_yield: 30 };
+        let stats2 = SEYieldStats {
+            n_reads: 2,
+            max_length: 10,
+            clipped_yield: 20,
+            total_yield: 30,
+        };
         stats1.add_assign_to_statistic(&stats2);
         assert_eq!(stats1.n_reads, 3);
         assert_eq!(stats1.max_length, 10);
@@ -302,8 +307,18 @@ mod tests {
             },
         };
         let stats2 = PEYieldStats {
-            first_end: SEYieldStats { n_reads: 2, max_length: 10, clipped_yield: 20, total_yield: 30 },
-            second_end: SEYieldStats { n_reads: 3, max_length: 12, clipped_yield: 22, total_yield: 32 },
+            first_end: SEYieldStats {
+                n_reads: 2,
+                max_length: 10,
+                clipped_yield: 20,
+                total_yield: 30,
+            },
+            second_end: SEYieldStats {
+                n_reads: 3,
+                max_length: 12,
+                clipped_yield: 22,
+                total_yield: 32,
+            },
         };
         stats1.add_assign_to_statistic(&stats2);
         assert_eq!(stats1.first_end.n_reads, 3);

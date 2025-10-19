@@ -7,7 +7,8 @@ use crate::constants::DEFAULT_DUP_TAG;
 #[derive(Debug, Clone, ValueEnum, Default)]
 pub enum Aggregation {
     Sample,
-    #[default] Library,
+    #[default]
+    Library,
 }
 
 impl fmt::Display for Aggregation {

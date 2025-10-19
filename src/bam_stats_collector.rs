@@ -34,9 +34,9 @@ impl BamStatsCollector {
                 match error {
                     AppError::NotFirstNotLastSegment() => {
                         warn!("Warning: read is not marked as first or last segment. Skipping.");
-                        return Ok(())
+                        return Ok(());
                     }
-                    _ => return Err(error)
+                    _ => return Err(error),
                 }
             }
         }
@@ -78,9 +78,7 @@ mod tests {
         let args = Args::parse_from(&["bamstats", "-i", "test.bam", "-m", "metrics.txt"]);
         let collector = BamStatsCollector::new(&args);
         assert_eq!(collector.stats.len(), 1);
-        assert!(collector.stats[0]
-            .as_any()
-            .is::<DuplicateStats>());
+        assert!(collector.stats[0].as_any().is::<DuplicateStats>());
     }
 
     #[test]
@@ -104,9 +102,7 @@ mod tests {
         ]);
         let collector = BamStatsCollector::new(&args);
         assert_eq!(collector.stats.len(), 2);
-        assert!(collector.stats[0]
-            .as_any()
-            .is::<DuplicateStats>());
+        assert!(collector.stats[0].as_any().is::<DuplicateStats>());
         assert!(collector.stats[1].as_any().is::<PEYieldStats>());
     }
 

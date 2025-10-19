@@ -9,8 +9,8 @@ mod statistic;
 mod yield_stats;
 
 use crate::bam_stats_collector::BamStatsCollector;
-use crate::cli::{Args, Aggregation};
-use crate::constants::{ReadGroupTag, StatisticKind, UNKNOWN, RECORDS_LOG_INTERVAL};
+use crate::cli::{Aggregation, Args};
+use crate::constants::{RECORDS_LOG_INTERVAL, ReadGroupTag, StatisticKind, UNKNOWN};
 use crate::error::AppError;
 use clap::Parser;
 use log::{debug, error, info, trace};
@@ -122,9 +122,7 @@ fn aggregate_stats(
 
         let sample = get_rg_info(rg_map, ReadGroupTag::Sample.as_ref());
         let aggregation_key = match &args.aggregation {
-            Aggregation::Sample => {
-                AggregationKey::Sample(sample)
-            }
+            Aggregation::Sample => AggregationKey::Sample(sample),
             Aggregation::Library => {
                 let library = get_rg_info(rg_map, ReadGroupTag::Library.as_ref());
                 AggregationKey::Library(sample, library)

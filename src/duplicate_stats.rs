@@ -84,7 +84,6 @@ impl DuplicateStats {
         estimate_library_size(read_pairs, unique_read_pairs)
     }
 
-
     fn is_unmapped_read(flags: &Flags) -> bool {
         flags.is_unmapped()
     }
@@ -435,9 +434,15 @@ mod tests {
 
     #[test]
     fn test_is_secondary_or_supplementary() {
-        assert!(DuplicateStats::is_secondary_or_supplementary(&Flags::SECONDARY));
-        assert!(DuplicateStats::is_secondary_or_supplementary(&Flags::SUPPLEMENTARY));
-        assert!(!DuplicateStats::is_secondary_or_supplementary(&Flags::empty()));
+        assert!(DuplicateStats::is_secondary_or_supplementary(
+            &Flags::SECONDARY
+        ));
+        assert!(DuplicateStats::is_secondary_or_supplementary(
+            &Flags::SUPPLEMENTARY
+        ));
+        assert!(!DuplicateStats::is_secondary_or_supplementary(
+            &Flags::empty()
+        ));
     }
 
     #[test]
@@ -445,7 +450,9 @@ mod tests {
         // Not segmented, so unpaired
         assert!(DuplicateStats::is_unpaired_read(&Flags::empty()));
         // Segmented, but mate unmapped, so unpaired
-        assert!(DuplicateStats::is_unpaired_read(&(Flags::SEGMENTED | Flags::MATE_UNMAPPED)));
+        assert!(DuplicateStats::is_unpaired_read(
+            &(Flags::SEGMENTED | Flags::MATE_UNMAPPED)
+        ));
         // Segmented and mate mapped, so paired
         assert!(!DuplicateStats::is_unpaired_read(&(Flags::SEGMENTED)));
     }
@@ -453,15 +460,25 @@ mod tests {
     #[test]
     fn test_is_valid_duplicate_candidate() {
         // Is duplicate, not secondary, not supplementary, not unmapped
-        assert!(DuplicateStats::is_valid_duplicate_candidate(&Flags::DUPLICATE));
+        assert!(DuplicateStats::is_valid_duplicate_candidate(
+            &Flags::DUPLICATE
+        ));
         // Not duplicate
-        assert!(!DuplicateStats::is_valid_duplicate_candidate(&Flags::empty()));
+        assert!(!DuplicateStats::is_valid_duplicate_candidate(
+            &Flags::empty()
+        ));
         // Is duplicate, but secondary
-        assert!(!DuplicateStats::is_valid_duplicate_candidate(&(Flags::DUPLICATE | Flags::SECONDARY)));
+        assert!(!DuplicateStats::is_valid_duplicate_candidate(
+            &(Flags::DUPLICATE | Flags::SECONDARY)
+        ));
         // Is duplicate, but supplementary
-        assert!(!DuplicateStats::is_valid_duplicate_candidate(&(Flags::DUPLICATE | Flags::SUPPLEMENTARY)));
+        assert!(!DuplicateStats::is_valid_duplicate_candidate(
+            &(Flags::DUPLICATE | Flags::SUPPLEMENTARY)
+        ));
         // Is duplicate, but unmapped
-        assert!(!DuplicateStats::is_valid_duplicate_candidate(&(Flags::DUPLICATE | Flags::UNMAPPED)));
+        assert!(!DuplicateStats::is_valid_duplicate_candidate(
+            &(Flags::DUPLICATE | Flags::UNMAPPED)
+        ));
     }
 
     #[test]
