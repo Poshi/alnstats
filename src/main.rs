@@ -13,7 +13,7 @@ use crate::cli::{Aggregation, Args};
 use crate::constants::{RECORDS_LOG_INTERVAL, ReadGroupTag, StatisticKind, UNKNOWN};
 use crate::error::AppError;
 use clap::Parser;
-use log::{debug, error, info, trace};
+use log::{debug, info, trace, warn};
 use noodles::bam::Record;
 use noodles::bam::io::reader::Builder;
 use noodles::sam::Header;
@@ -97,11 +97,11 @@ fn process_bam(bam_filename: &String, args: &Args) -> Result<(Header, StatsPerRG
                     .or_insert_with(|| BamStatsCollector::new(args));
 
                 if let Err(e) = collector.add_record(&record) {
-                    error!("Error processing record: {}", e);
+                    warn!("Error processing record: {}", e);
                 }
             }
             Err(e) => {
-                error!("Error reading record {i}: {e}");
+                warn!("Error reading record {i}: {e}");
             }
         }
     }
