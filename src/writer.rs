@@ -3,6 +3,7 @@ use crate::cli::Args;
 use crate::error::AppError;
 use crate::constants::StatisticKind;
 use log::trace;
+use serde_json::Value;
 use std::fs::File;
 use std::io::BufWriter;
 
@@ -18,6 +19,27 @@ fn write_output(
     Ok(())
 }
 
+fn insert_value(
+    target_map: &mut serde_json::Map<String, Value>,
+    key: &AggregationKey,
+    json_val: Value,
+) {
+    match key {
+        AggregationKey::Sample(sample_name) => {
+            target_map.insert(sample_name.clone(), json_val);
+        }
+        AggregationKey::Library(sample_name, library_name) => {
+            let sample_entry = target_map
+                .entry(sample_name.clone())
+                .or_insert_with(|| Value::Object(serde_json::Map::new()));
+
+            if let Some(sample_map) = sample_entry.as_object_mut() {
+                sample_map.insert(library_name.clone(), json_val);
+            }
+        }
+    }
+}
+
 pub fn write_results(stats_per_aggregate_key: &StatsPerKey, args: &Args) -> Result<(), AppError> {
     trace!("Generating JSON output...");
 
@@ -26,25 +48,11 @@ pub fn write_results(stats_per_aggregate_key: &StatsPerKey, args: &Args) -> Resu
 
     for (key, stats_collector) in stats_per_aggregate_key {
         for stat in &stats_collector.stats {
-            let json_val = stat.as_json()?;
-            let target_map = match stat.kind() {
+            let destination = match stat.kind() {
                 StatisticKind::YieldPE | StatisticKind::YieldSE => &mut yield_results,
                 StatisticKind::Duplicate => &mut duplicate_results,
             };
-            match key {
-                AggregationKey::Sample(sample_name) => {
-                    target_map.insert(sample_name.clone(), json_val);
-                }
-                AggregationKey::Library(sample_name, library_name) => {
-                    let sample_entry = target_map
-                        .entry(sample_name.clone())
-                        .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
-
-                    if let Some(sample_map) = sample_entry.as_object_mut() {
-                        sample_map.insert(library_name.clone(), json_val);
-                    }
-                }
-            }
+            insert_value(destination, key, stat.as_json()?);
         }
     }
 
