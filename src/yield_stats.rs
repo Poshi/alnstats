@@ -393,4 +393,48 @@ mod tests {
         assert_eq!(stats1.second_end.clipped_yield, 32);
         assert_eq!(stats1.second_end.total_yield, 47);
     }
+
+    #[test]
+    fn test_seyieldstats_add_record_with_clipping() {
+        let mut stats = SEYieldStats::default();
+
+        let cigar = vec![
+            Op::new(Kind::SoftClip, 2),
+            Op::new(Kind::Match, 8),
+            Op::new(Kind::SoftClip, 5),
+        ]
+        .into();
+        let record_buf = RecordBuf::builder()
+            .set_sequence(b"ACGTACGTACGTACG".to_vec().into()) // 15 bases
+            .set_cigar(cigar)
+            .build();
+
+        stats.add_record(&record_buf).unwrap();
+
+        assert_eq!(stats.n_reads, 1);
+        assert_eq!(stats.max_length, 15);
+        // clipped_yield = 8M = 8
+        assert_eq!(stats.clipped_yield, 8);
+        assert_eq!(stats.total_yield, 15);
+    }
+
+    #[test]
+    fn test_peyieldstats_add_record_ignore_supplementary_and_secondary() {
+        let mut stats = PEYieldStats::default();
+
+        // Supplementary record
+        let record_buf_supp = RecordBuf::builder()
+            .set_flags(Flags::SUPPLEMENTARY)
+            .build();
+        stats.add_record(&record_buf_supp).unwrap();
+
+        // Secondary record
+        let record_buf_sec = RecordBuf::builder()
+            .set_flags(Flags::SECONDARY)
+            .build();
+        stats.add_record(&record_buf_sec).unwrap();
+
+        assert_eq!(stats.first_end.n_reads, 0);
+        assert_eq!(stats.second_end.n_reads, 0);
+    }
 }
