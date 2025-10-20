@@ -76,6 +76,7 @@ dependencies = [
  "env_logger",
  "log",
  "noodles",
+ "noodles-util",
  "serde",
  "serde_json",
  "strum",
@@ -605,6 +606,23 @@ dependencies = [
  "noodles-bgzf",
  "noodles-core",
  "noodles-csi",
+]
+
+[[package]]
+name = "noodles-util"
+version = "0.70.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf4b90971c63f1591136bd201e525cf6f251c8297aaed7e65a5434c8883b7650"
+dependencies = [
+ "bstr",
+ "flate2",
+ "noodles-bam",
+ "noodles-bgzf",
+ "noodles-core",
+ "noodles-cram",
+ "noodles-csi",
+ "noodles-fasta",
+ "noodles-sam",
 ]
 
 [[package]]

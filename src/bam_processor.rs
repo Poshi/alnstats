@@ -3,7 +3,8 @@ use crate::cli::{Aggregation, Args};
 use crate::constants::{RECORDS_LOG_INTERVAL, ReadGroupTag, UNKNOWN};
 use crate::error::AppError;
 use log::{info, trace, warn};
-use noodles::bam::io::reader::Builder;
+
+use noodles_util::alignment::io::reader::Builder;
 use noodles::sam::alignment::Record;
 use noodles::sam::alignment::record::data::field::{Tag, Value};
 use noodles::sam::Header;
@@ -60,7 +61,7 @@ pub type StatsPerKey = HashMap<AggregationKey, BamStatsCollector>;
 pub fn process_bam(bam_filename: &String, args: &Args) -> Result<(Header, StatsPerRG), AppError> {
     // Open input file
     trace!("Opening input file: {bam_filename}");
-    let mut reader = Builder.build_from_path(bam_filename)?;
+    let mut reader = Builder::default().build_from_path(bam_filename)?;
 
     // Read the header to position the file pointer
     trace!("Reading BAM header...");
@@ -70,7 +71,7 @@ pub fn process_bam(bam_filename: &String, args: &Args) -> Result<(Header, StatsP
 
     // Traverse input file while filling in the stats
     trace!("Processing BAM records...");
-    for (i, rec) in reader.records().enumerate() {
+    for (i, rec) in reader.records(&header).enumerate() {
         if i > 0 && i % RECORDS_LOG_INTERVAL == 0 {
             info!("{i} elements processed...");
         }
