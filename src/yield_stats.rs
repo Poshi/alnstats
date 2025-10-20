@@ -124,7 +124,6 @@ impl PEYieldStats {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
