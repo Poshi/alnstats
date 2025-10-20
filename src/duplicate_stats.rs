@@ -263,20 +263,52 @@ impl DuplicateStats {
         }
     }
 
+    pub fn unpaired_reads_examined(&self) -> u64 {
+        self.unpaired_reads_examined
+    }
+
     pub fn unmapped_reads(&self) -> u64 {
         self.unmapped_reads
+    }
+
+    fn secondary_or_supplementary_rds(&self) -> u64 {
+        self.secondary_or_supplementary_rds
+    }
+
+    fn pvt_read_pairs_examined(&self) -> u64 {
+        self.pvt_read_pairs_examined
+    }
+
+    fn unpaired_read_duplicates(&self) -> u64 {
+        self.unpaired_read_duplicates
+    }
+
+    fn pvt_read_pair_duplicates(&self) -> u64 {
+        self.pvt_read_pair_duplicates
+    }
+
+    fn pvt_read_pair_optical_duplicates(&self) -> u64 {
+        self.pvt_read_pair_optical_duplicates
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    // use noodles::sam::alignment::record::Flags; // Removed redundant import
+    use noodles::sam::alignment::RecordBuf;
+    use noodles::sam::alignment::record::data::field::Tag;
+    use noodles::sam::alignment::record_buf;
 
     #[test]
     fn test_default() {
         let stats = DuplicateStats::default();
-        assert!(stats.duplicate_type_tags.contains(DEFAULT_DUP_TAG.as_bytes()));
+
+        assert!(
+            stats
+                .duplicate_type_tags
+                .contains(DEFAULT_DUP_TAG.as_bytes())
+        );
+
         assert_eq!(stats.duplicate_type_tags.len(), 1);
         assert_eq!(stats.unpaired_reads_examined, 0);
         assert_eq!(stats.pvt_read_pairs_examined, 0);
@@ -289,26 +321,12 @@ mod tests {
 
     #[test]
     fn test_duplicatestats_add_assign() {
-        let mut stats1 = DuplicateStats::for_test(
-            HashSet::from_iter(vec![*b"XT"]),
-            10,
-            100,
-            5,
-            2,
-            1,
-            10,
-            3,
-        );
-        let stats2 = DuplicateStats::for_test(
-            HashSet::from_iter(vec![*b"XT"]),
-            20,
-            200,
-            10,
-            4,
-            2,
-            20,
-            6,
-        );
+        let mut stats1 =
+            DuplicateStats::for_test(HashSet::from_iter(vec![*b"XT"]), 10, 100, 5, 2, 1, 10, 3);
+
+        let stats2 =
+            DuplicateStats::for_test(HashSet::from_iter(vec![*b"XT"]), 20, 200, 10, 4, 2, 20, 6);
+
         stats1 += &stats2;
 
         let expected_tags = HashSet::from_iter(vec![*b"XT"]);
@@ -326,7 +344,13 @@ mod tests {
     #[test]
     fn test_new_default_tag() {
         let stats = DuplicateStats::new(&[]);
-        assert!(stats.duplicate_type_tags.contains(DEFAULT_DUP_TAG.as_bytes()));
+
+        assert!(
+            stats
+                .duplicate_type_tags
+                .contains(DEFAULT_DUP_TAG.as_bytes())
+        );
+
         assert_eq!(stats.duplicate_type_tags.len(), 1);
     }
 
@@ -334,7 +358,13 @@ mod tests {
     fn test_new_custom_tag() {
         let custom_tag = String::from("XT");
         let stats = DuplicateStats::new(&[custom_tag.clone()]);
-        assert!(stats.duplicate_type_tags.contains::<[u8; 2]>(&custom_tag.as_bytes().try_into().unwrap()));
+
+        assert!(
+            stats
+                .duplicate_type_tags
+                .contains::<[u8; 2]>(&custom_tag.as_bytes().try_into().unwrap())
+        );
+
         assert_eq!(stats.duplicate_type_tags.len(), 1);
     }
 
@@ -525,16 +555,9 @@ mod tests {
 
     #[test]
     fn test_duplicatestats_as_json() {
-        let stats = DuplicateStats::for_test(
-            HashSet::from_iter(vec![*b"XT"]),
-            10,
-            100,
-            5,
-            2,
-            1,
-            10,
-            3,
-        );
+        let stats =
+            DuplicateStats::for_test(HashSet::from_iter(vec![*b"XT"]), 10, 100, 5, 2, 1, 10, 3);
+
         let json = stats.as_json().unwrap();
         assert_eq!(json["UNPAIRED_READS_EXAMINED"], 10);
         assert_eq!(json["READ_PAIRS_EXAMINED"], 50);
@@ -552,5 +575,85 @@ mod tests {
     fn test_duplicatestats_kind() {
         let stats = DuplicateStats::default();
         assert_eq!(stats.kind(), StatisticKind::Duplicate);
+    }
+
+    #[test]
+    fn test_add_record_unmapped_read() {
+        let mut stats = DuplicateStats::default();
+        let record = RecordBuf::builder().set_flags(Flags::UNMAPPED).build();
+        stats.add_record(&record).unwrap();
+        assert_eq!(stats.unmapped_reads(), 1);
+    }
+
+    #[test]
+    fn test_add_record_secondary_read() {
+        let mut stats = DuplicateStats::default();
+        let record = RecordBuf::builder().set_flags(Flags::SECONDARY).build();
+        stats.add_record(&record).unwrap();
+        assert_eq!(stats.secondary_or_supplementary_rds(), 1);
+    }
+
+    #[test]
+    fn test_add_record_supplementary_read() {
+        let mut stats = DuplicateStats::default();
+        let record = RecordBuf::builder().set_flags(Flags::SUPPLEMENTARY).build();
+        stats.add_record(&record).unwrap();
+        assert_eq!(stats.secondary_or_supplementary_rds(), 1);
+    }
+
+    #[test]
+    fn test_add_record_unpaired_read() {
+        let mut stats = DuplicateStats::default();
+        let record = RecordBuf::builder().set_flags(Flags::empty()).build(); // No flags, so it's unpaired
+        stats.add_record(&record).unwrap();
+        assert_eq!(stats.unpaired_reads_examined(), 1);
+    }
+
+    #[test]
+    fn test_add_record_paired_read() {
+        let mut stats = DuplicateStats::default();
+        let record = RecordBuf::builder().set_flags(Flags::SEGMENTED).build();
+        stats.add_record(&record).unwrap();
+        assert_eq!(stats.pvt_read_pairs_examined(), 1);
+    }
+
+    #[test]
+    fn test_add_record_unpaired_duplicate() {
+        let mut stats = DuplicateStats::default();
+        let record = RecordBuf::builder().set_flags(Flags::DUPLICATE).build();
+        stats.add_record(&record).unwrap();
+        assert_eq!(stats.unpaired_reads_examined(), 1);
+        assert_eq!(stats.unpaired_read_duplicates(), 1);
+    }
+
+    #[test]
+    fn test_add_record_paired_duplicate() {
+        let mut stats = DuplicateStats::default();
+        let record = RecordBuf::builder()
+            .set_flags(Flags::SEGMENTED | Flags::DUPLICATE)
+            .build();
+        stats.add_record(&record).unwrap();
+        assert_eq!(stats.pvt_read_pairs_examined(), 1);
+        assert_eq!(stats.pvt_read_pair_duplicates(), 1);
+        assert_eq!(stats.pvt_read_pair_optical_duplicates(), 0);
+    }
+
+    #[test]
+    fn test_add_record_optical_duplicate() {
+        let mut stats = DuplicateStats::new(&[String::from("XT")]);
+        let data: record_buf::Data = [(
+            Tag::new(b'X', b'T'),
+            record_buf::data::field::Value::String(SEQ_DUP_VALUE.into()),
+        )]
+        .into_iter()
+        .collect();
+        let record = RecordBuf::builder()
+            .set_flags(Flags::SEGMENTED | Flags::DUPLICATE)
+            .set_data(data)
+            .build();
+        stats.add_record(&record).unwrap();
+        assert_eq!(stats.pvt_read_pairs_examined(), 1);
+        assert_eq!(stats.pvt_read_pair_duplicates(), 1);
+        assert_eq!(stats.pvt_read_pair_optical_duplicates(), 1);
     }
 }
