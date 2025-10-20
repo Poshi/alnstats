@@ -1,7 +1,7 @@
 use crate::bam_processor::{AggregationKey, StatsPerKey};
 use crate::cli::Args;
-use crate::error::AppError;
 use crate::constants::StatisticKind;
+use crate::error::AppError;
 use log::trace;
 use serde_json::Value;
 use std::fs::File;
@@ -25,9 +25,7 @@ fn insert_value(
     json_val: Value,
 ) {
     let (leaf_map, leaf_key) = match key {
-        AggregationKey::Sample(sample_name) => {
-            (target_map, sample_name.clone())
-        }
+        AggregationKey::Sample(sample_name) => (target_map, sample_name.clone()),
         AggregationKey::Library(sample_name, library_name) => {
             let sample_entry = target_map
                 .entry(sample_name.clone())

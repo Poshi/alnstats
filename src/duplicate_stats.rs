@@ -32,9 +32,9 @@ pub struct DuplicateStats {
 impl Default for DuplicateStats {
     fn default() -> Self {
         Self {
-            duplicate_type_tags: HashSet::from_iter(vec![DEFAULT_DUP_TAG.as_bytes()
-                .try_into()
-                .unwrap()]),
+            duplicate_type_tags: HashSet::from_iter(vec![
+                DEFAULT_DUP_TAG.as_bytes().try_into().unwrap(),
+            ]),
             unpaired_reads_examined: 0,
             pvt_read_pairs_examined: 0,
             secondary_or_supplementary_rds: 0,
@@ -194,20 +194,28 @@ impl AddAssign<&Self> for DuplicateStats {
 pub struct DuplicateStatsJson {
     #[serde(rename = "UNPAIRED_READS_EXAMINED")]
     unpaired_reads_examined: u64,
+
     #[serde(rename = "READ_PAIRS_EXAMINED")]
     read_pairs_examined: u64,
+
     #[serde(rename = "SECONDARY_OR_SUPPLEMENTARY_RDS")]
     secondary_or_supplementary_rds: u64,
+
     #[serde(rename = "UNMAPPED_READS")]
     unmapped_reads: u64,
+
     #[serde(rename = "UNPAIRED_READ_DUPLICATES")]
     unpaired_read_duplicates: u64,
+
     #[serde(rename = "READ_PAIR_DUPLICATES")]
     read_pair_duplicates: u64,
+
     #[serde(rename = "READ_PAIR_OPTICAL_DUPLICATES")]
     read_pair_optical_duplicates: u64,
+
     #[serde(rename = "PERCENT_DUPLICATION")]
     percent_duplication: f64,
+
     #[serde(rename = "ESTIMATED_LIBRARY_SIZE")]
     estimated_library_size: u64,
 }

@@ -4,10 +4,10 @@ use crate::constants::{RECORDS_LOG_INTERVAL, ReadGroupTag, UNKNOWN};
 use crate::error::AppError;
 use log::{info, trace, warn};
 
-use noodles_util::alignment::io::reader::Builder;
+use noodles::sam::Header;
 use noodles::sam::alignment::Record;
 use noodles::sam::alignment::record::data::field::{Tag, Value};
-use noodles::sam::Header;
+use noodles_util::alignment::io::reader::Builder;
 use std::collections::HashMap;
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]

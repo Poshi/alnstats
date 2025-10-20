@@ -26,7 +26,10 @@ impl BamStatsCollector {
         }
 
         if args.yield_out.is_some() {
-            stats.insert(TypeId::of::<PEYieldStats>(), Box::new(PEYieldStats::default()));
+            stats.insert(
+                TypeId::of::<PEYieldStats>(),
+                Box::new(PEYieldStats::default()),
+            );
         }
 
         Self { stats }
@@ -71,7 +74,11 @@ mod tests {
         let args = Args::parse_from(&["bamstats", "-i", "test.bam", "-m", "metrics.txt"]);
         let collector = BamStatsCollector::new(&args);
         assert_eq!(collector.stats.len(), 1);
-        assert!(collector.stats.contains_key(&TypeId::of::<DuplicateStats>()));
+        assert!(
+            collector
+                .stats
+                .contains_key(&TypeId::of::<DuplicateStats>())
+        );
     }
 
     #[test]
@@ -95,7 +102,11 @@ mod tests {
         ]);
         let collector = BamStatsCollector::new(&args);
         assert_eq!(collector.stats.len(), 2);
-        assert!(collector.stats.contains_key(&TypeId::of::<DuplicateStats>()));
+        assert!(
+            collector
+                .stats
+                .contains_key(&TypeId::of::<DuplicateStats>())
+        );
         assert!(collector.stats.contains_key(&TypeId::of::<PEYieldStats>()));
     }
 
@@ -113,29 +124,17 @@ mod tests {
         let mut collector1 = BamStatsCollector::new(&args);
         let mut collector2 = BamStatsCollector::new(&args);
 
-        let dup_stats1 = DuplicateStats::for_test(
-            HashSet::from_iter(vec![*b"XT"]),
-            0,
-            0,
-            0,
-            10,
-            0,
-            0,
-            0,
-        );
-        collector1.stats.insert(TypeId::of::<DuplicateStats>(), Box::new(dup_stats1));
+        let dup_stats1 =
+            DuplicateStats::for_test(HashSet::from_iter(vec![*b"XT"]), 0, 0, 0, 10, 0, 0, 0);
+        collector1
+            .stats
+            .insert(TypeId::of::<DuplicateStats>(), Box::new(dup_stats1));
 
-        let dup_stats2 = DuplicateStats::for_test(
-            HashSet::from_iter(vec![*b"XT"]),
-            0,
-            0,
-            0,
-            20,
-            0,
-            0,
-            0,
-        );
-        collector2.stats.insert(TypeId::of::<DuplicateStats>(), Box::new(dup_stats2));
+        let dup_stats2 =
+            DuplicateStats::for_test(HashSet::from_iter(vec![*b"XT"]), 0, 0, 0, 20, 0, 0, 0);
+        collector2
+            .stats
+            .insert(TypeId::of::<DuplicateStats>(), Box::new(dup_stats2));
 
         collector1 += &collector2;
 

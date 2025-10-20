@@ -2,11 +2,10 @@ use crate::cigar_ext::CigarExt;
 use crate::constants::StatisticKind;
 use crate::error::AppError;
 use crate::statistic::Statistic;
+use log::warn;
 use noodles::sam::alignment::Record;
 use serde::Serialize;
 use std::ops::AddAssign;
-use log::warn;
-
 
 #[derive(Debug, Serialize, PartialEq, Clone, Default)]
 pub struct SEYieldStats {
@@ -111,9 +110,9 @@ impl AddAssign<&Self> for PEYieldStats {
 mod tests {
     use super::*;
     use noodles::sam::alignment::RecordBuf;
-    use noodles::sam::alignment::record::cigar::op::Kind;
-    use noodles::sam::alignment::record::cigar::Op;
     use noodles::sam::alignment::record::Flags;
+    use noodles::sam::alignment::record::cigar::Op;
+    use noodles::sam::alignment::record::cigar::op::Kind;
 
     #[test]
     fn test_seyieldstats_add_record() {
@@ -156,9 +155,7 @@ mod tests {
         stats.add_record(&record_buf_2).unwrap();
 
         // Neither first nor last
-        let record_buf_3 = RecordBuf::builder()
-            .set_flags(Flags::SEGMENTED)
-            .build();
+        let record_buf_3 = RecordBuf::builder().set_flags(Flags::SEGMENTED).build();
         stats.add_record(&record_buf_3).unwrap();
 
         assert_eq!(stats.first_end.n_reads, 1);
@@ -423,15 +420,11 @@ mod tests {
         let mut stats = PEYieldStats::default();
 
         // Supplementary record
-        let record_buf_supp = RecordBuf::builder()
-            .set_flags(Flags::SUPPLEMENTARY)
-            .build();
+        let record_buf_supp = RecordBuf::builder().set_flags(Flags::SUPPLEMENTARY).build();
         stats.add_record(&record_buf_supp).unwrap();
 
         // Secondary record
-        let record_buf_sec = RecordBuf::builder()
-            .set_flags(Flags::SECONDARY)
-            .build();
+        let record_buf_sec = RecordBuf::builder().set_flags(Flags::SECONDARY).build();
         stats.add_record(&record_buf_sec).unwrap();
 
         assert_eq!(stats.first_end.n_reads, 0);
