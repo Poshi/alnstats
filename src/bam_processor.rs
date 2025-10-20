@@ -126,3 +126,294 @@ pub fn aggregate_stats(
 
     aggregated_stats
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cli::Args;
+    use crate::constants::DEFAULT_DUP_TAG;
+    use crate::duplicate_stats::DuplicateStats;
+    use clap::Parser;
+    use noodles::sam::alignment::RecordBuf;
+    use noodles::sam::alignment::record::data::field::Tag;
+    use noodles::sam::alignment::record_buf;
+    use noodles::sam::header::record::value::map::read_group::tag;
+    use noodles::sam::header::record::value::{Map, map::ReadGroup};
+    use std::any::TypeId;
+    use std::collections::HashSet;
+
+    #[test]
+    fn test_get_rg_tag() {
+        let record = RecordBuf::builder()
+            .set_data(
+                [(
+                    Tag::new(b'R', b'G'),
+                    record_buf::data::field::Value::String("rg1".into()),
+                )]
+                .into_iter()
+                .collect(),
+            )
+            .build();
+        assert_eq!(get_rg_tag(&record), Some("rg1".to_string()));
+    }
+
+    #[test]
+    fn test_get_rg_info() {
+        let mut rg_map = HashMap::new();
+        rg_map.insert("SM".to_string(), "sample1".to_string());
+        assert_eq!(get_rg_info(Some(&rg_map), "SM"), "sample1".to_string());
+        assert_eq!(get_rg_info(Some(&rg_map), "LB"), "unknown".to_string());
+    }
+
+    #[test]
+    fn test_get_read_groups() {
+        let mut header_builder = Header::builder();
+        header_builder = header_builder.add_read_group("rg1", Map::<ReadGroup>::default());
+        let rg2 = Map::<ReadGroup>::builder()
+            .insert(tag::SAMPLE, b"sample1".to_vec())
+            .build()
+            .unwrap();
+        header_builder = header_builder.add_read_group("rg2", rg2);
+
+        let header = header_builder.build();
+        let rg_info = get_read_groups(&header);
+
+        assert_eq!(rg_info.len(), 2);
+        assert_eq!(rg_info.get("rg1").unwrap().get("ID").unwrap(), "rg1");
+        assert_eq!(rg_info.get("rg2").unwrap().get("SM").unwrap(), "sample1");
+    }
+
+    #[test]
+    fn test_aggregate_stats_by_sample() {
+        let args = Args::parse_from(&[
+            "bamstats",
+            "-i",
+            "test.bam",
+            "-m",
+            "metrics.txt",
+            "-a",
+            "sample",
+        ]);
+        let mut stats_per_rg = StatsPerRG::new();
+
+        let mut collector1 = BamStatsCollector::new(&args);
+        let dup_stats1 = DuplicateStats::for_test(
+            HashSet::from_iter(vec![DEFAULT_DUP_TAG.as_bytes().try_into().unwrap()]),
+            10,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        );
+        collector1
+            .stats
+            .insert(TypeId::of::<DuplicateStats>(), Box::new(dup_stats1));
+        stats_per_rg.insert("rg1".to_string(), collector1);
+
+        let mut collector2 = BamStatsCollector::new(&args);
+        let dup_stats2 = DuplicateStats::for_test(
+            HashSet::from_iter(vec![DEFAULT_DUP_TAG.as_bytes().try_into().unwrap()]),
+            20,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        );
+        collector2
+            .stats
+            .insert(TypeId::of::<DuplicateStats>(), Box::new(dup_stats2));
+        stats_per_rg.insert("rg2".to_string(), collector2);
+
+        let mut header_builder = Header::builder();
+        let rg1 = Map::<ReadGroup>::builder()
+            .insert(tag::SAMPLE, b"sample1".to_vec())
+            .build()
+            .unwrap();
+        header_builder = header_builder.add_read_group("rg1", rg1);
+        let rg2 = Map::<ReadGroup>::builder()
+            .insert(tag::SAMPLE, b"sample1".to_vec())
+            .build()
+            .unwrap();
+        header_builder = header_builder.add_read_group("rg2", rg2);
+        let header = header_builder.build();
+
+        let aggregated_stats = aggregate_stats(&stats_per_rg, &header, &args);
+
+        assert_eq!(aggregated_stats.len(), 1);
+        let key = AggregationKey::Sample("sample1".to_string());
+        let collector = aggregated_stats.get(&key).unwrap();
+        let dup_stats = collector
+            .stats
+            .get(&TypeId::of::<DuplicateStats>())
+            .unwrap()
+            .as_any()
+            .downcast_ref::<DuplicateStats>()
+            .unwrap();
+        assert_eq!(dup_stats.unpaired_reads_examined(), 30);
+    }
+
+    #[test]
+    fn test_aggregate_stats_by_library() {
+        let args = Args::parse_from(&[
+            "bamstats",
+            "-i",
+            "test.bam",
+            "-m",
+            "metrics.txt",
+            "-a",
+            "library",
+        ]);
+        let mut stats_per_rg = StatsPerRG::new();
+
+        let mut collector1 = BamStatsCollector::new(&args);
+        let dup_stats1 = DuplicateStats::for_test(
+            HashSet::from_iter(vec![DEFAULT_DUP_TAG.as_bytes().try_into().unwrap()]),
+            10,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        );
+        collector1
+            .stats
+            .insert(TypeId::of::<DuplicateStats>(), Box::new(dup_stats1));
+        stats_per_rg.insert("rg1".to_string(), collector1);
+
+        let mut collector2 = BamStatsCollector::new(&args);
+        let dup_stats2 = DuplicateStats::for_test(
+            HashSet::from_iter(vec![DEFAULT_DUP_TAG.as_bytes().try_into().unwrap()]),
+            20,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        );
+        collector2
+            .stats
+            .insert(TypeId::of::<DuplicateStats>(), Box::new(dup_stats2));
+        stats_per_rg.insert("rg2".to_string(), collector2);
+
+        let mut header_builder = Header::builder();
+        let rg1 = Map::<ReadGroup>::builder()
+            .insert(tag::SAMPLE, b"sample1".to_vec())
+            .insert(tag::LIBRARY, b"library1".to_vec())
+            .build()
+            .unwrap();
+        header_builder = header_builder.add_read_group("rg1", rg1);
+        let rg2 = Map::<ReadGroup>::builder()
+            .insert(tag::SAMPLE, b"sample1".to_vec())
+            .insert(tag::LIBRARY, b"library1".to_vec())
+            .build()
+            .unwrap();
+        header_builder = header_builder.add_read_group("rg2", rg2);
+        let header = header_builder.build();
+
+        let aggregated_stats = aggregate_stats(&stats_per_rg, &header, &args);
+
+        assert_eq!(aggregated_stats.len(), 1);
+        let key = AggregationKey::Library("sample1".to_string(), "library1".to_string());
+        let collector = aggregated_stats.get(&key).unwrap();
+        let dup_stats = collector
+            .stats
+            .get(&TypeId::of::<DuplicateStats>())
+            .unwrap()
+            .as_any()
+            .downcast_ref::<DuplicateStats>()
+            .unwrap();
+        assert_eq!(dup_stats.unpaired_reads_examined(), 30);
+    }
+
+    #[test]
+    fn test_aggregate_stats_by_library_different_libraries() {
+        let args = Args::parse_from(&[
+            "bamstats",
+            "-i",
+            "test.bam",
+            "-m",
+            "metrics.txt",
+            "-a",
+            "library",
+        ]);
+        let mut stats_per_rg = StatsPerRG::new();
+
+        let mut collector1 = BamStatsCollector::new(&args);
+        let dup_stats1 = DuplicateStats::for_test(
+            HashSet::from_iter(vec![DEFAULT_DUP_TAG.as_bytes().try_into().unwrap()]),
+            10,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        );
+        collector1
+            .stats
+            .insert(TypeId::of::<DuplicateStats>(), Box::new(dup_stats1));
+        stats_per_rg.insert("rg1".to_string(), collector1);
+
+        let mut collector2 = BamStatsCollector::new(&args);
+        let dup_stats2 = DuplicateStats::for_test(
+            HashSet::from_iter(vec![DEFAULT_DUP_TAG.as_bytes().try_into().unwrap()]),
+            20,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        );
+        collector2
+            .stats
+            .insert(TypeId::of::<DuplicateStats>(), Box::new(dup_stats2));
+        stats_per_rg.insert("rg2".to_string(), collector2);
+
+        let mut header_builder = Header::builder();
+        let rg1 = Map::<ReadGroup>::builder()
+            .insert(tag::SAMPLE, b"sample1".to_vec())
+            .insert(tag::LIBRARY, b"library1".to_vec())
+            .build()
+            .unwrap();
+        header_builder = header_builder.add_read_group("rg1", rg1);
+        let rg2 = Map::<ReadGroup>::builder()
+            .insert(tag::SAMPLE, b"sample1".to_vec())
+            .insert(tag::LIBRARY, b"library2".to_vec())
+            .build()
+            .unwrap();
+        header_builder = header_builder.add_read_group("rg2", rg2);
+        let header = header_builder.build();
+
+        let aggregated_stats = aggregate_stats(&stats_per_rg, &header, &args);
+
+        assert_eq!(aggregated_stats.len(), 2);
+        let key = AggregationKey::Library("sample1".to_string(), "library1".to_string());
+        let collector = aggregated_stats.get(&key).unwrap();
+        let dup_stats = collector
+            .stats
+            .get(&TypeId::of::<DuplicateStats>())
+            .unwrap()
+            .as_any()
+            .downcast_ref::<DuplicateStats>()
+            .unwrap();
+        assert_eq!(dup_stats.unpaired_reads_examined(), 10);
+
+        let key = AggregationKey::Library("sample1".to_string(), "library2".to_string());
+        let collector = aggregated_stats.get(&key).unwrap();
+        let dup_stats = collector
+            .stats
+            .get(&TypeId::of::<DuplicateStats>())
+            .unwrap()
+            .as_any()
+            .downcast_ref::<DuplicateStats>()
+            .unwrap();
+        assert_eq!(dup_stats.unpaired_reads_examined(), 20);
+    }
+}
