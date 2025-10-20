@@ -163,4 +163,36 @@ mod tests {
 
         collector1 += &collector2;
     }
+
+    #[test]
+    fn test_add_record() {
+        let args = Args::parse_from(&[
+            "bamstats",
+            "-i",
+            "test.bam",
+            "-m",
+            "metrics.txt",
+            "--yield",
+            "yield.txt",
+        ]);
+        let mut collector = BamStatsCollector::new(&args);
+        let record = noodles::sam::alignment::RecordBuf::builder()
+            .set_flags(noodles::sam::alignment::record::Flags::empty())
+            .build();
+
+        collector.add_record(&record).unwrap();
+
+        let dup_stats = collector.stats[&TypeId::of::<DuplicateStats>()]
+            .as_any()
+            .downcast_ref::<DuplicateStats>()
+            .unwrap();
+        assert_eq!(dup_stats.unpaired_reads_examined(), 1);
+
+        let yield_stats = collector.stats[&TypeId::of::<PEYieldStats>()]
+            .as_any()
+            .downcast_ref::<PEYieldStats>()
+            .unwrap();
+        assert_eq!(yield_stats.first_end().n_reads(), 0);
+        assert_eq!(yield_stats.second_end().n_reads(), 0);
+    }
 }

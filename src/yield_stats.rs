@@ -107,6 +107,25 @@ impl AddAssign<&Self> for PEYieldStats {
 }
 
 #[cfg(test)]
+impl SEYieldStats {
+    pub fn n_reads(&self) -> u64 {
+        self.n_reads
+    }
+}
+
+#[cfg(test)]
+impl PEYieldStats {
+    pub fn first_end(&self) -> &SEYieldStats {
+        &self.first_end
+    }
+
+    pub fn second_end(&self) -> &SEYieldStats {
+        &self.second_end
+    }
+}
+
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use noodles::sam::alignment::RecordBuf;
