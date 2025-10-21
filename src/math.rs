@@ -23,7 +23,7 @@ fn f(x: f64, c: f64, n: f64) -> f64 {
 /// Returns:
 /// u64: the estimated size of the library
 pub fn estimate_library_size(read_pairs: u64, unique_read_pairs: u64) -> Result<u64, AppError> {
-    let read_pair_duplicates = read_pairs - unique_read_pairs;
+    let read_pair_duplicates = (read_pairs as i128 - unique_read_pairs as i128) as i64;
 
     if read_pairs == 0 || read_pair_duplicates == 0 {
         return Err(AppError::ZeroReads {

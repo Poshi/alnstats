@@ -12,7 +12,7 @@ pub enum AppError {
     #[error("Read pairs ({read_pairs}) or duplicate pairs ({read_pair_duplicates}) are zero!")]
     ZeroReads {
         read_pairs: u64,
-        read_pair_duplicates: u64,
+        read_pair_duplicates: i64,
     },
 
     #[error("Invalid values for pairs and unique pairs: {read_pairs}, {unique_read_pairs}")]
