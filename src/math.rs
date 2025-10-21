@@ -1,7 +1,7 @@
 use crate::error::AppError;
 
 /// Auxiliar function that implements the Lander-Waterman equation
-fn f(x: f64, c: f64, n: f64) -> f64 {
+pub(crate) fn f(x: f64, c: f64, n: f64) -> f64 {
     (c / x) - 1.0 + (-n / x).exp()
 }
 
@@ -84,6 +84,26 @@ pub fn estimate_library_size(read_pairs: u64, unique_read_pairs: u64) -> Result<
 mod tests {
     use super::*;
     use assert_matches::assert_matches;
+
+    #[test]
+    fn test_f() {
+        // Test with values that should yield a result close to 0
+        let x1 = 2154.184;
+        let c1 = 800.0;
+        let n1 = 1000.0;
+        assert!(f(x1, c1, n1).abs() < 1e-5);
+
+        let x2 = 2154184.0;
+        let c2 = 800000.0;
+        let n2 = 1000000.0;
+        assert!(f(x2, c2, n2).abs() < 1e-5);
+
+        // Test with values that should not yield a result close to 0
+        let x3 = 1000.0;
+        let c3 = 800.0;
+        let n3 = 1000.0;
+        assert!(f(x3, c3, n3).abs() > 1e-5);
+    }
 
     #[test]
     fn test_estimate_library_size_success() {
