@@ -79,3 +79,76 @@ pub fn estimate_library_size(read_pairs: u64, unique_read_pairs: u64) -> Result<
 
     Ok((unique_read_pairs as f64 * f64::midpoint(lower_bound, upper_bound)) as u64)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use assert_matches::assert_matches;
+
+    #[test]
+    fn test_estimate_library_size_success() {
+        // Typical case
+        let result = estimate_library_size(1000, 800);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 2154);
+
+        // Large values
+        let result = estimate_library_size(1_000_000, 800_000);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 2154184);
+    }
+
+    #[test]
+    fn test_estimate_library_size_edge_cases() {
+        // unique_read_pairs very close to read_pairs
+        let result = estimate_library_size(1000, 999);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 499666);
+    }
+
+    #[test]
+    fn test_estimate_library_size_zero_reads() {
+        // read_pairs is zero
+        let result = estimate_library_size(0, 0);
+        assert_matches!(
+            result,
+            Err(AppError::ZeroReads {
+                read_pairs: 0,
+                read_pair_duplicates: 0
+            })
+        );
+
+        // read_pair_duplicates is zero
+        let result = estimate_library_size(100, 100);
+        assert_matches!(
+            result,
+            Err(AppError::ZeroReads {
+                read_pairs: 100,
+                read_pair_duplicates: 0
+            })
+        );
+    }
+
+    #[test]
+    fn test_estimate_library_size_invalid_values() {
+        // unique_read_pairs > read_pairs
+        let result = estimate_library_size(100, 200);
+        assert_matches!(
+            result,
+            Err(AppError::InvalidValues {
+                read_pairs: 100,
+                unique_read_pairs: 200
+            })
+        );
+
+        // unique_read_pairs == read_pairs (but handled by ZeroReads)
+        let result = estimate_library_size(100, 100);
+        assert_matches!(
+            result,
+            Err(AppError::ZeroReads {
+                read_pairs: 100,
+                read_pair_duplicates: 0
+            })
+        );
+    }
+}
