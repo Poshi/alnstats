@@ -58,6 +58,18 @@ fn get_rg_info<'a>(rg_map: Option<&'a HashMap<String, String>>, tag: &str) -> St
 pub type StatsPerRG = HashMap<String, BamStatsCollector>;
 pub type StatsPerKey = HashMap<AggregationKey, BamStatsCollector>;
 
+fn process_single_record(stats_per_rg: &mut StatsPerRG, record: &dyn Record, args: &Args) {
+    let rg_id = get_rg_tag(record).unwrap_or_else(|| UNKNOWN.to_string());
+
+    let collector = stats_per_rg
+        .entry(rg_id)
+        .or_insert_with(|| BamStatsCollector::new(args));
+
+    if let Err(e) = collector.add_record(record) {
+        warn!("Error processing record: {}", e);
+    }
+}
+
 pub fn process_bam(bam_filename: &String, args: &Args) -> Result<(Header, StatsPerRG), AppError> {
     // Open input file
     trace!("Opening input file: {bam_filename}");
@@ -77,20 +89,8 @@ pub fn process_bam(bam_filename: &String, args: &Args) -> Result<(Header, StatsP
         }
 
         match rec {
-            Ok(record) => {
-                let rg_id = get_rg_tag(&record).unwrap_or_else(|| UNKNOWN.to_string());
-
-                let collector = stats_per_rg
-                    .entry(rg_id)
-                    .or_insert_with(|| BamStatsCollector::new(args));
-
-                if let Err(e) = collector.add_record(&record) {
-                    warn!("Error processing record: {}", e);
-                }
-            }
-            Err(e) => {
-                warn!("Error reading record {i}: {e}");
-            }
+            Ok(record) => process_single_record(&mut stats_per_rg, &record, args),
+            Err(e) => warn!("Error reading record {i}: {e}"),
         }
     }
 
