@@ -2,6 +2,7 @@
 name = "bamstats"
 version = "0.1.0"
 edition = "2024"
+default-run = "bamstats"
 
 [dependencies]
 clap = { version = "4.5.47", features = ["derive"] }
