@@ -32,6 +32,10 @@ pub struct Args {
     #[arg(short, long)]
     pub input: String,
 
+    /// The fasta reference, needed for CRAM files
+    #[arg(short, long)]
+    pub fasta: Option<String>,
+
     /// Output file for the duplicate metrics
     #[arg(short, long)]
     pub metrics: Option<String>,

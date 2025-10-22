@@ -4,6 +4,9 @@ use crate::constants::{RECORDS_LOG_INTERVAL, ReadGroupTag, UNKNOWN};
 use crate::error::AppError;
 use log::{info, trace, warn};
 
+use noodles::fasta::Repository;
+use noodles::fasta::io::indexed_reader;
+use noodles::fasta::repository::adapters::IndexedReader;
 use noodles::sam::Header;
 use noodles::sam::alignment::Record;
 use noodles::sam::alignment::record::data::field::{Tag, Value};
@@ -70,19 +73,30 @@ fn process_single_record(stats_per_rg: &mut StatsPerRG, record: &dyn Record, arg
     }
 }
 
-pub fn process_bam(bam_filename: &String, args: &Args) -> Result<(Header, StatsPerRG), AppError> {
+pub fn process_bam(aln_filename: &String, args: &Args) -> Result<(Header, StatsPerRG), AppError> {
+    let mut builder = Builder::default();
+
+    if let Some(fasta) = &args.fasta {
+        let repository = indexed_reader::Builder::default()
+            .build_from_path(fasta)
+            .map(IndexedReader::new)
+            .map(Repository::new)?;
+
+        builder = builder.set_reference_sequence_repository(repository);
+    }
+
     // Open input file
-    trace!("Opening input file: {bam_filename}");
-    let mut reader = Builder::default().build_from_path(bam_filename)?;
+    trace!("Opening input file: {aln_filename}");
+    let mut reader = builder.build_from_path(aln_filename)?;
 
     // Read the header to position the file pointer
-    trace!("Reading BAM header...");
+    trace!("Reading alignment header...");
     let header = reader.read_header()?;
 
     let mut stats_per_rg: StatsPerRG = HashMap::new();
 
     // Traverse input file while filling in the stats
-    trace!("Processing BAM records...");
+    trace!("Processing alignment records...");
     for (i, rec) in reader.records(&header).enumerate() {
         if i > 0 && i % RECORDS_LOG_INTERVAL == 0 {
             info!("{i} elements processed...");
