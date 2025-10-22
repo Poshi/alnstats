@@ -21,7 +21,7 @@ impl Statistic for SEYieldStats {
 
         self.n_reads += 1;
         self.max_length = self.max_length.max(seq_length);
-        self.clipped_yield += u64::from(record.cigar().query_alignment_length());
+        self.clipped_yield += record.cigar().query_alignment_length() as u64;
         self.total_yield += seq_length;
 
         Ok(())
