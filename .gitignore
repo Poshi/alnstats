@@ -1,5 +1,8 @@
 /target
+/test_data
 *.sam
 *.bam
 *.cram
 *.json
+*.fasta
+*.fai
