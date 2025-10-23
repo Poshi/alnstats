@@ -1,8 +1,8 @@
 [package]
-name = "bamstats"
+name = "alnstats"
 version = "0.1.0"
 edition = "2024"
-default-run = "bamstats"
+default-run = "alnstats"
 
 [dependencies]
 clap = { version = "4.5.47", features = ["derive"] }
