@@ -3,6 +3,10 @@ name = "alnstats"
 version = "0.1.0"
 edition = "2024"
 default-run = "alnstats"
+description = "A high-performance command-line tool designed to calculate yield and duplicate statistics from BAM, SAM, or CRAM alignment files"
+license = "GPL-3.0-or-later"
+readme = "README.md"
+repository = "https://github.com/Poshi/alnstats"
 
 [dependencies]
 clap = { version = "4.6.0", features = ["derive"] }
