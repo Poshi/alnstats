@@ -12,6 +12,7 @@ use noodles::sam::alignment::Record;
 use noodles::sam::alignment::record::data::field::{Tag, Value};
 use noodles_util::alignment::io::reader::Builder;
 use std::collections::HashMap;
+use std::time::Instant;
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub enum AggregationKey {
@@ -95,18 +96,67 @@ pub fn process_bam(aln_filename: &String, args: &Args) -> Result<(Header, StatsP
 
     let mut stats_per_rg: StatsPerRG = HashMap::new();
 
+    // Log start information
+    let start_time = chrono::Local::now();
+    info!(
+        "Processing started at {} on host {} by user {}",
+        start_time.format("%Y-%m-%d %H:%M:%S"),
+        whoami::hostname().unwrap_or_else(|_| "unknown".to_string()),
+        whoami::username().unwrap_or_else(|_| "unknown".to_string())
+    );
+
+    let start_instant = Instant::now();
+    let mut total_records = 0;
+    let mut last_log_instant = start_instant;
+    let mut last_log_records = 0;
+
     // Traverse input file while filling in the stats
     trace!("Processing alignment records...");
     for (i, rec) in reader.records(&header).enumerate() {
-        if i > 0 && i % RECORDS_LOG_INTERVAL == 0 {
-            info!("{i} elements processed...");
-        }
-
         match rec {
             Ok(record) => process_single_record(&mut stats_per_rg, &record, args),
             Err(e) => warn!("Error reading record {i}: {e}"),
         }
+
+        total_records += 1;
+
+        if total_records > 0 && total_records % RECORDS_LOG_INTERVAL == 0 {
+            let now = Instant::now();
+            let duration_interval = now.duration_since(last_log_instant);
+            let elapsed_interval = duration_interval.as_secs_f64();
+            let records_interval = total_records - last_log_records;
+            let speed = if elapsed_interval > 0.0 {
+                records_interval as f64 / elapsed_interval
+            } else {
+                0.0
+            };
+
+            info!(
+                "{total_records} elements processed ({:.2} records/s, last interval took {:.2?})...",
+                speed, duration_interval
+            );
+
+            last_log_instant = now;
+            last_log_records = total_records;
+        }
     }
+
+    let total_elapsed = start_instant.elapsed();
+    let total_elapsed_secs = total_elapsed.as_secs_f64();
+    let avg_speed = if total_elapsed_secs > 0.0 {
+        total_records as f64 / total_elapsed_secs
+    } else {
+        0.0
+    };
+
+    let end_time = chrono::Local::now();
+    info!(
+        "Processing finished at {}: {} records processed in {:.2?} (avg speed: {:.2} records/s)",
+        end_time.format("%Y-%m-%d %H:%M:%S"),
+        total_records,
+        total_elapsed,
+        avg_speed
+    );
 
     Ok((header, stats_per_rg))
 }
