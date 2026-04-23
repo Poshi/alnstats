@@ -192,7 +192,9 @@ mod tests {
             .as_any()
             .downcast_ref::<PEYieldStats>()
             .unwrap();
+        assert_eq!(yield_stats.singleton().n_reads(), 1);
         assert_eq!(yield_stats.first_end().n_reads(), 0);
         assert_eq!(yield_stats.second_end().n_reads(), 0);
+        assert_eq!(yield_stats.other().n_reads(), 0);
     }
 }

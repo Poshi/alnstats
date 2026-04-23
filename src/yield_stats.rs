@@ -2,7 +2,6 @@ use crate::cigar_ext::CigarExt;
 use crate::constants::StatisticKind;
 use crate::error::AppError;
 use crate::statistic::Statistic;
-use log::warn;
 use noodles::sam::alignment::Record;
 use serde::Serialize;
 use std::ops::AddAssign;
@@ -57,8 +56,10 @@ impl AddAssign<&Self> for SEYieldStats {
 
 #[derive(Debug, Serialize, PartialEq, Clone, Default)]
 pub struct PEYieldStats {
+    singleton: SEYieldStats,
     first_end: SEYieldStats,
     second_end: SEYieldStats,
+    other: SEYieldStats,
 }
 
 impl Statistic for PEYieldStats {
@@ -69,12 +70,26 @@ impl Statistic for PEYieldStats {
             return Ok(());
         }
 
-        if flags.is_first_segment() {
-            self.first_end.add_record(record)?;
-        } else if flags.is_last_segment() {
-            self.second_end.add_record(record)?;
+        if flags.is_segmented() {
+            // Here we have the reads of technologies that read multiple segments in a template
+            if flags.is_first_segment() {
+                if flags.is_last_segment() {
+                    // Both flags set: this is a middle segment in a linear template
+                    self.other.add_record(record)?;
+                } else {
+                    // Only first segment set: this is the first end of a multiple segment read in a linear template
+                    self.first_end.add_record(record)?;
+                }
+            } else if flags.is_last_segment() {
+                // Only last segment set: this is the last end of a multiple segment read in a linear template
+                self.second_end.add_record(record)?;
+            } else {
+                // No flags set: this is a non-linear template or the data have been lost
+                self.singleton.add_record(record)?;
+            }
         } else {
-            warn!("Warning: read is not marked as first or last segment. Skipping.")
+            // Here we have the reads of technologies that perform a single read in a template
+            self.singleton.add_record(record)?;
         }
 
         Ok(())
@@ -101,8 +116,10 @@ impl Statistic for PEYieldStats {
 
 impl AddAssign<&Self> for PEYieldStats {
     fn add_assign(&mut self, rhs: &Self) {
+        self.singleton += &rhs.singleton;
         self.first_end += &rhs.first_end;
         self.second_end += &rhs.second_end;
+        self.other += &rhs.other;
     }
 }
 
@@ -121,6 +138,14 @@ impl PEYieldStats {
 
     pub fn second_end(&self) -> &SEYieldStats {
         &self.second_end
+    }
+
+    pub fn singleton(&self) -> &SEYieldStats {
+        &self.singleton
+    }
+
+    pub fn other(&self) -> &SEYieldStats {
+        &self.other
     }
 }
 
@@ -172,9 +197,22 @@ mod tests {
             .build();
         stats.add_record(&record_buf_2).unwrap();
 
-        // Neither first nor last
-        let record_buf_3 = RecordBuf::builder().set_flags(Flags::SEGMENTED).build();
+        // Middle segment (both first and last flags)
+        let cigar3 = vec![Op::new(Kind::Match, 5)].into();
+        let record_buf_3 = RecordBuf::builder()
+            .set_flags(Flags::SEGMENTED | Flags::FIRST_SEGMENT | Flags::LAST_SEGMENT)
+            .set_sequence(b"ACGTG".to_vec().into())
+            .set_cigar(cigar3)
+            .build();
         stats.add_record(&record_buf_3).unwrap();
+
+        // Singleton (no flags)
+        let cigar4 = vec![Op::new(Kind::Match, 3)].into();
+        let record_buf_4 = RecordBuf::builder()
+            .set_sequence(b"ACG".to_vec().into())
+            .set_cigar(cigar4)
+            .build();
+        stats.add_record(&record_buf_4).unwrap();
 
         assert_eq!(stats.first_end.n_reads, 1);
         assert_eq!(stats.first_end.max_length, 4);
@@ -185,6 +223,16 @@ mod tests {
         assert_eq!(stats.second_end.max_length, 7);
         assert_eq!(stats.second_end.clipped_yield, 7);
         assert_eq!(stats.second_end.total_yield, 7);
+
+        assert_eq!(stats.other.n_reads, 1);
+        assert_eq!(stats.other.max_length, 5);
+        assert_eq!(stats.other.clipped_yield, 5);
+        assert_eq!(stats.other.total_yield, 5);
+
+        assert_eq!(stats.singleton.n_reads, 1);
+        assert_eq!(stats.singleton.max_length, 3);
+        assert_eq!(stats.singleton.clipped_yield, 3);
+        assert_eq!(stats.singleton.total_yield, 3);
     }
 
     #[test]
@@ -207,6 +255,12 @@ mod tests {
         assert_eq!(
             result,
             PEYieldStats {
+                singleton: SEYieldStats {
+                    n_reads: 0,
+                    max_length: 0,
+                    clipped_yield: 0,
+                    total_yield: 0,
+                },
                 first_end: SEYieldStats {
                     n_reads: 0,
                     max_length: 0,
@@ -214,6 +268,12 @@ mod tests {
                     total_yield: 0,
                 },
                 second_end: SEYieldStats {
+                    n_reads: 0,
+                    max_length: 0,
+                    clipped_yield: 0,
+                    total_yield: 0,
+                },
+                other: SEYieldStats {
                     n_reads: 0,
                     max_length: 0,
                     clipped_yield: 0,
@@ -252,6 +312,12 @@ mod tests {
     #[test]
     fn test_peyieldstats_add_assign() {
         let mut stats1 = PEYieldStats {
+            singleton: SEYieldStats {
+                n_reads: 5,
+                max_length: 50,
+                clipped_yield: 2,
+                total_yield: 500,
+            },
             first_end: SEYieldStats {
                 n_reads: 10,
                 max_length: 100,
@@ -263,9 +329,21 @@ mod tests {
                 max_length: 100,
                 clipped_yield: 5,
                 total_yield: 1000,
+            },
+            other: SEYieldStats {
+                n_reads: 7,
+                max_length: 70,
+                clipped_yield: 3,
+                total_yield: 700,
             },
         };
         let stats2 = PEYieldStats {
+            singleton: SEYieldStats {
+                n_reads: 8,
+                max_length: 60,
+                clipped_yield: 4,
+                total_yield: 800,
+            },
             first_end: SEYieldStats {
                 n_reads: 20,
                 max_length: 150,
@@ -277,12 +355,24 @@ mod tests {
                 max_length: 150,
                 clipped_yield: 10,
                 total_yield: 2000,
+            },
+            other: SEYieldStats {
+                n_reads: 12,
+                max_length: 120,
+                clipped_yield: 6,
+                total_yield: 1200,
             },
         };
         stats1 += &stats2;
         assert_eq!(
             stats1,
             PEYieldStats {
+                singleton: SEYieldStats {
+                    n_reads: 13,
+                    max_length: 60,
+                    clipped_yield: 6,
+                    total_yield: 1300,
+                },
                 first_end: SEYieldStats {
                     n_reads: 30,
                     max_length: 150,
@@ -294,6 +384,12 @@ mod tests {
                     max_length: 150,
                     clipped_yield: 15,
                     total_yield: 3000,
+                },
+                other: SEYieldStats {
+                    n_reads: 19,
+                    max_length: 120,
+                    clipped_yield: 9,
+                    total_yield: 1900,
                 },
             }
         );
@@ -323,6 +419,12 @@ mod tests {
     #[test]
     fn test_peyieldstats_as_json() {
         let stats = PEYieldStats {
+            singleton: SEYieldStats {
+                n_reads: 3,
+                max_length: 30,
+                clipped_yield: 15,
+                total_yield: 30,
+            },
             first_end: SEYieldStats {
                 n_reads: 1,
                 max_length: 10,
@@ -335,10 +437,18 @@ mod tests {
                 clipped_yield: 10,
                 total_yield: 20,
             },
+            other: SEYieldStats {
+                n_reads: 4,
+                max_length: 40,
+                clipped_yield: 20,
+                total_yield: 40,
+            },
         };
         let json = stats.as_json().unwrap();
+        assert_eq!(json["singleton"]["n_reads"], 3);
         assert_eq!(json["first_end"]["n_reads"], 1);
         assert_eq!(json["second_end"]["n_reads"], 2);
+        assert_eq!(json["other"]["n_reads"], 4);
     }
 
     #[test]
@@ -371,6 +481,12 @@ mod tests {
     #[test]
     fn test_peyieldstats_add_assign_to_statistic() {
         let mut stats1 = PEYieldStats {
+            singleton: SEYieldStats {
+                n_reads: 1,
+                max_length: 5,
+                clipped_yield: 5,
+                total_yield: 10,
+            },
             first_end: SEYieldStats {
                 n_reads: 1,
                 max_length: 5,
@@ -383,8 +499,20 @@ mod tests {
                 clipped_yield: 10,
                 total_yield: 15,
             },
+            other: SEYieldStats {
+                n_reads: 2,
+                max_length: 8,
+                clipped_yield: 12,
+                total_yield: 20,
+            },
         };
         let stats2 = PEYieldStats {
+            singleton: SEYieldStats {
+                n_reads: 1,
+                max_length: 3,
+                clipped_yield: 3,
+                total_yield: 5,
+            },
             first_end: SEYieldStats {
                 n_reads: 2,
                 max_length: 10,
@@ -397,8 +525,18 @@ mod tests {
                 clipped_yield: 22,
                 total_yield: 32,
             },
+            other: SEYieldStats {
+                n_reads: 1,
+                max_length: 6,
+                clipped_yield: 8,
+                total_yield: 10,
+            },
         };
         stats1.add_assign_to_statistic(&stats2);
+        assert_eq!(stats1.singleton.n_reads, 2);
+        assert_eq!(stats1.singleton.max_length, 5);
+        assert_eq!(stats1.singleton.clipped_yield, 8);
+        assert_eq!(stats1.singleton.total_yield, 15);
         assert_eq!(stats1.first_end.n_reads, 3);
         assert_eq!(stats1.first_end.max_length, 10);
         assert_eq!(stats1.first_end.clipped_yield, 30);
@@ -407,6 +545,10 @@ mod tests {
         assert_eq!(stats1.second_end.max_length, 12);
         assert_eq!(stats1.second_end.clipped_yield, 32);
         assert_eq!(stats1.second_end.total_yield, 47);
+        assert_eq!(stats1.other.n_reads, 3);
+        assert_eq!(stats1.other.max_length, 8);
+        assert_eq!(stats1.other.clipped_yield, 20);
+        assert_eq!(stats1.other.total_yield, 30);
     }
 
     #[test]
@@ -445,6 +587,77 @@ mod tests {
         let record_buf_sec = RecordBuf::builder().set_flags(Flags::SECONDARY).build();
         stats.add_record(&record_buf_sec).unwrap();
 
+        assert_eq!(stats.singleton.n_reads, 0);
+        assert_eq!(stats.first_end.n_reads, 0);
+        assert_eq!(stats.second_end.n_reads, 0);
+        assert_eq!(stats.other.n_reads, 0);
+    }
+
+    #[test]
+    fn test_peyieldstats_singleton_field() {
+        let mut stats = PEYieldStats::default();
+
+        // Singleton record (no SEGMENTED flag)
+        let cigar = vec![Op::new(Kind::Match, 10)].into();
+        let record_buf = RecordBuf::builder()
+            .set_sequence(b"ACGTACGTAC".to_vec().into())
+            .set_cigar(cigar)
+            .build();
+
+        stats.add_record(&record_buf).unwrap();
+
+        assert_eq!(stats.singleton.n_reads, 1);
+        assert_eq!(stats.singleton.max_length, 10);
+        assert_eq!(stats.singleton.clipped_yield, 10);
+        assert_eq!(stats.singleton.total_yield, 10);
+        assert_eq!(stats.first_end.n_reads, 0);
+        assert_eq!(stats.second_end.n_reads, 0);
+        assert_eq!(stats.other.n_reads, 0);
+    }
+
+    #[test]
+    fn test_peyieldstats_segmented_without_first_last_flags() {
+        let mut stats = PEYieldStats::default();
+
+        // Record with SEGMENTED flag but neither FIRST_SEGMENT nor LAST_SEGMENT
+        // This should go to singleton according to the new logic
+        let cigar = vec![Op::new(Kind::Match, 6)].into();
+        let record_buf = RecordBuf::builder()
+            .set_flags(Flags::SEGMENTED)
+            .set_sequence(b"ACGTAC".to_vec().into())
+            .set_cigar(cigar)
+            .build();
+
+        stats.add_record(&record_buf).unwrap();
+
+        assert_eq!(stats.singleton.n_reads, 1);
+        assert_eq!(stats.singleton.max_length, 6);
+        assert_eq!(stats.singleton.clipped_yield, 6);
+        assert_eq!(stats.singleton.total_yield, 6);
+        assert_eq!(stats.first_end.n_reads, 0);
+        assert_eq!(stats.second_end.n_reads, 0);
+        assert_eq!(stats.other.n_reads, 0);
+    }
+
+    #[test]
+    fn test_peyieldstats_other_field() {
+        let mut stats = PEYieldStats::default();
+
+        // Middle segment record (both FIRST_SEGMENT and LAST_SEGMENT flags)
+        let cigar = vec![Op::new(Kind::Match, 8)].into();
+        let record_buf = RecordBuf::builder()
+            .set_flags(Flags::SEGMENTED | Flags::FIRST_SEGMENT | Flags::LAST_SEGMENT)
+            .set_sequence(b"ACGTACGT".to_vec().into())
+            .set_cigar(cigar)
+            .build();
+
+        stats.add_record(&record_buf).unwrap();
+
+        assert_eq!(stats.other.n_reads, 1);
+        assert_eq!(stats.other.max_length, 8);
+        assert_eq!(stats.other.clipped_yield, 8);
+        assert_eq!(stats.other.total_yield, 8);
+        assert_eq!(stats.singleton.n_reads, 0);
         assert_eq!(stats.first_end.n_reads, 0);
         assert_eq!(stats.second_end.n_reads, 0);
     }
